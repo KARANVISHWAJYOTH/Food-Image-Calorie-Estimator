@@ -8,7 +8,6 @@ from typing import List, Optional
 
 from .schemas import PredictionResponse, HealthResponse, HistoryItem
 from .predictor import predictor_instance
-from .food_database import FOOD_DATABASE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,45 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory history cache for backend demo
-HISTORY_STORE: List[dict] = [
-    {
-        "id": "pred_hist_01",
-        "foodClass": "Chicken Biryani",
-        "calories": 720,
-        "protein": 34,
-        "carbs": 84,
-        "fat": 26,
-        "confidenceScore": 0.962,
-        "imageUrl": "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=600&q=80",
-        "timestamp": "2026-09-09T19:30:00Z",
-        "portion": 1.0
-    },
-    {
-        "id": "pred_hist_02",
-        "foodClass": "Masala Dosa",
-        "calories": 420,
-        "protein": 11.5,
-        "carbs": 64,
-        "fat": 14,
-        "confidenceScore": 0.935,
-        "imageUrl": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=600&q=80",
-        "timestamp": "2026-09-09T08:45:00Z",
-        "portion": 1.0
-    },
-    {
-        "id": "pred_hist_03",
-        "foodClass": "Paneer Butter Masala",
-        "calories": 560,
-        "protein": 21,
-        "carbs": 26,
-        "fat": 42,
-        "confidenceScore": 0.918,
-        "imageUrl": "https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&w=600&q=80",
-        "timestamp": "2026-09-08T20:15:00Z",
-        "portion": 1.0
-    }
-]
+HISTORY_STORE: List[dict] = []
 
 @app.get("/", tags=["General"])
 def root():
@@ -92,26 +53,6 @@ def health_check():
         device=str(predictor_instance.device),
         version="1.0.0"
     )
-
-@app.get("/api/foods", tags=["Database"])
-def list_supported_foods():
-    """Returns database of recognizable food items with baseline nutrition profile."""
-    return {
-        "total": len(FOOD_DATABASE),
-        "items": [
-            {
-                "key": key,
-                "name": val["name"],
-                "category": val.get("category", "Main Course"),
-                "calories": val["calories"],
-                "protein": val["protein"],
-                "carbs": val["carbohydrates"],
-                "fat": val["fat"],
-                "sampleImage": val.get("sampleImage", "")
-            }
-            for key, val in FOOD_DATABASE.items()
-        ]
-    }
 
 @app.post("/api/predict", response_model=PredictionResponse, tags=["Prediction"])
 async def predict_food(image: UploadFile = File(...)):

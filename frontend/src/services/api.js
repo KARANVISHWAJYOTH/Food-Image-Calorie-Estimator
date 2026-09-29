@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { SAMPLE_FOODS, MOCK_HISTORY_INITIAL } from '../data/sampleFoods';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -23,84 +22,17 @@ export const checkApiHealth = async () => {
 
 /**
  * Predict food from uploaded image file.
- * Automatically tries live FastAPI backend first; if unavailable, falls back to realistic AI simulation.
+ * Sends the image to the live model inference API.
  */
-export const predictFood = async (fileOrBlob, presetHint = null) => {
-  // If backend is running, attempt real multi-part upload
-  try {
-    const formData = new FormData();
-    formData.append('image', fileOrBlob);
+export const predictFood = async (fileOrBlob) => {
+  const formData = new FormData();
+  formData.append('image', fileOrBlob);
 
-    const response = await apiClient.post('/api/predict', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+  const response = await apiClient.post('/api/predict', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
 
-    return {
-      success: true,
-      data: response.data,
-      source: 'live_fastapi',
-    };
-  } catch (backendError) {
-    // Graceful fallback to rich realistic ML simulation
-    console.info('Backend API offline or unreachable. Using NutriVision AI Demo Simulation engine.');
-    
-    // Simulate realistic multi-task neural network inference latency
-    await new Promise((resolve) => setTimeout(resolve, 1600));
-
-    // Match sample food by preset hint or filename
-    let matched = SAMPLE_FOODS[0]; // Default: Grilled Chicken Rice Bowl
-
-    if (presetHint) {
-      const found = SAMPLE_FOODS.find((f) => f.key === presetHint || f.id === presetHint);
-      if (found) matched = found;
-    } else if (fileOrBlob && fileOrBlob.name) {
-      const name = fileOrBlob.name.toLowerCase();
-      if (name.includes('biryani')) matched = SAMPLE_FOODS.find((f) => f.key === 'chicken_biryani');
-      else if (name.includes('dosa')) matched = SAMPLE_FOODS.find((f) => f.key === 'masala_dosa');
-      else if (name.includes('paneer')) matched = SAMPLE_FOODS.find((f) => f.key === 'paneer_butter_masala');
-      else if (name.includes('salmon') || name.includes('quinoa')) matched = SAMPLE_FOODS.find((f) => f.key === 'salmon_quinoa_bowl');
-      else if (name.includes('avocado') || name.includes('toast')) matched = SAMPLE_FOODS.find((f) => f.key === 'avocado_toast');
-      else if (name.includes('caesar') || name.includes('salad')) matched = SAMPLE_FOODS.find((f) => f.key === 'caesar_salad');
-      else if (name.includes('pizza')) matched = SAMPLE_FOODS.find((f) => f.key === 'pepperoni_pizza');
-      else if (name.includes('oat') || name.includes('berry')) matched = SAMPLE_FOODS.find((f) => f.key === 'oatmeal_berry_bowl');
-      else if (name.includes('low') || name.includes('uncertain') || name.includes('blur')) matched = SAMPLE_FOODS.find((f) => f.key === 'mixed_street_snack');
-    }
-
-    if (!matched) matched = SAMPLE_FOODS[0];
-
-    const result = {
-      id: `pred_${Math.random().toString(36).substr(2, 9)}`,
-      foodClass: matched.name,
-      category: matched.category,
-      confidenceScore: matched.confidenceScore,
-      confidencePercentage: matched.confidencePercentage,
-      estimatedCalories: matched.calories,
-      protein: matched.protein,
-      carbohydrates: matched.carbohydrates,
-      fat: matched.fat,
-      fiber: matched.fiber,
-      sugar: matched.sugar,
-      sodium: matched.sodium,
-      potassium: matched.potassium,
-      servingSize: matched.servingSize,
-      isLowConfidence: !!matched.isLowConfidence,
-      healthRating: matched.healthRating,
-      dietaryTags: matched.dietaryTags,
-      ingredients: matched.ingredients,
-      healthTips: matched.healthTips,
-      imageUrl: matched.imageUrl,
-      inferenceTimeMs: matched.inferenceTimeMs || 42.0,
-      timestamp: new Date().toISOString(),
-    };
-
-    return {
-      success: true,
-      data: result,
-      source: 'demo_simulation',
-    };
-  }
+  return { success: true, data: response.data, source: 'live_fastapi' };
 };
 
 /**
@@ -116,10 +48,10 @@ export const getPredictionHistory = async () => {
       try {
         return JSON.parse(local);
       } catch (e) {
-        return MOCK_HISTORY_INITIAL;
+        return [];
       }
     }
-    return MOCK_HISTORY_INITIAL;
+    return [];
   }
 };
 
@@ -133,7 +65,7 @@ export const savePrediction = async (prediction) => {
   } catch (error) {
     // Save to localStorage
     const local = localStorage.getItem('nutrivision_history');
-    let historyList = local ? JSON.parse(local) : MOCK_HISTORY_INITIAL;
+    let historyList = local ? JSON.parse(local) : [];
     historyList = [prediction, ...historyList];
     localStorage.setItem('nutrivision_history', JSON.stringify(historyList));
     return { status: 'saved_locally', item: prediction };

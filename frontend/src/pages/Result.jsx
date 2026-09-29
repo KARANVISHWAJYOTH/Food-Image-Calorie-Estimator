@@ -25,17 +25,18 @@ import LowConfidenceAlert from '../components/LowConfidenceAlert';
 import DisclaimerBanner from '../components/DisclaimerBanner';
 import Toast from '../components/Toast';
 import { useHistory } from '../context/HistoryContext';
-import { SAMPLE_FOODS } from '../data/sampleFoods';
 
 export default function Result() {
   const { activeResult, addHistoryItem } = useHistory();
   const navigate = useNavigate();
 
-  // Fallback to first sample food if accessed directly without upload
-  const result = activeResult || {
-    ...SAMPLE_FOODS[0],
-    imageUrl: SAMPLE_FOODS[0].imageUrl,
-  };
+  const result = activeResult;
+
+  useEffect(() => {
+    if (!result) navigate('/analyze', { replace: true });
+  }, [result, navigate]);
+
+  if (!result) return null;
 
   const [portion, setPortion] = useState(1.0);
   const [toastMsg, setToastMsg] = useState(null);

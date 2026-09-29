@@ -9,14 +9,12 @@ import {
   AlertCircle,
   FileCheck2
 } from 'lucide-react';
-import SampleFoodPicker from './SampleFoodPicker';
 import ScanningOverlay from './ScanningOverlay';
 
 export default function FoodUploader({ onAnalyze, isLoading = false }) {
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
-  const [selectedPreset, setSelectedPreset] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
   const fileInputRef = useRef(null);
@@ -40,7 +38,6 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
     }
 
     setSelectedFile(file);
-    setSelectedPreset(null);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -74,16 +71,8 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
     }
   };
 
-  const handlePresetSelect = (preset) => {
-    setSelectedPreset(preset);
-    setSelectedFile(null);
-    setPreviewUrl(preset.imageUrl);
-    setErrorMsg(null);
-  };
-
   const handleClear = () => {
     setSelectedFile(null);
-    setSelectedPreset(null);
     setPreviewUrl(null);
     setErrorMsg(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -92,12 +81,11 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
 
   const handleTriggerAnalysis = () => {
     if (!previewUrl) {
-      setErrorMsg('Please upload a food photo or pick a sample dish first.');
+      setErrorMsg('Please upload a food photo first.');
       return;
     }
     onAnalyze({
       file: selectedFile,
-      preset: selectedPreset,
       previewUrl: previewUrl,
     });
   };
@@ -180,7 +168,7 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
               <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
                 <FileCheck2 className="w-4 h-4 text-brand-600" />
                 <span>
-                  {selectedPreset ? `Sample: ${selectedPreset.name}` : selectedFile?.name || 'Uploaded Food Photo'}
+                  {selectedFile?.name || 'Uploaded Food Photo'}
                 </span>
               </div>
               <button
@@ -247,10 +235,6 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
         </div>
       )}
 
-      {/* 1-Click Test Presets */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-soft">
-        <SampleFoodPicker onSelect={handlePresetSelect} selectedKey={selectedPreset?.id} />
-      </div>
     </div>
   );
 }

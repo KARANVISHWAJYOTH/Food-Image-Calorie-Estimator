@@ -16,10 +16,10 @@ export default function Dashboard() {
   const { history, setActiveResult, addHistoryItem } = useHistory();
   const navigate = useNavigate();
 
-  const handleAnalyze = async ({ file, preset, previewUrl }) => {
+  const handleAnalyze = async ({ file, previewUrl }) => {
     setIsLoading(true);
     try {
-      const res = await predictFood(file, preset?.key || preset?.id);
+      const res = await predictFood(file);
       if (res.success) {
         const resultData = {
           ...res.data,

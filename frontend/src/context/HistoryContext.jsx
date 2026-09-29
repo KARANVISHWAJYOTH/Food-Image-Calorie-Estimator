@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { MOCK_HISTORY_INITIAL } from '../data/sampleFoods';
 import { getPredictionHistory, savePrediction, deletePrediction as apiDeletePrediction } from '../services/api';
 
 const HistoryContext = createContext(null);
@@ -11,10 +10,10 @@ export const HistoryProvider = ({ children }) => {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        return MOCK_HISTORY_INITIAL;
+        return [];
       }
     }
-    return MOCK_HISTORY_INITIAL;
+    return [];
   });
 
   const [activeResult, setActiveResult] = useState(null);
@@ -37,7 +36,7 @@ export const HistoryProvider = ({ children }) => {
       potassium: item.potassium || 0,
       confidenceScore: item.confidenceScore,
       confidencePercentage: item.confidencePercentage || (item.confidenceScore * 100),
-      imageUrl: item.imageUrl || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=600&q=80',
+      imageUrl: item.imageUrl,
       timestamp: item.timestamp || new Date().toISOString(),
       portion: item.portion || 1.0,
       servingSize: item.servingSize,

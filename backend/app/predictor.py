@@ -1,4 +1,5 @@
 import io
+import os
 import time
 import uuid
 import logging
@@ -6,7 +7,6 @@ from PIL import Image
 from typing import Dict, Any, Optional
 
 from .schemas import PredictionResponse
-from .food_database import FOOD_DATABASE
 
 logger = logging.getLogger("nutrivision.predictor")
 
@@ -29,7 +29,7 @@ class FoodPredictor:
         self.device = "cpu"
         self.classes = list(CLASS_MAP.values())
         self.is_torch_ready = False
-        self._init_model(weights_path)
+        self._init_model(weights_path or os.getenv("MODEL_WEIGHTS_PATH"))
         
     def _init_model(self, weights_path: Optional[str]):
         try:
@@ -37,12 +37,15 @@ class FoodPredictor:
             from torchvision import transforms
             from .model import MultiTaskFoodCNN, TORCH_AVAILABLE
             
-            if not TORCH_AVAILABLE:
-                logger.info("Torch not available in runtime; using calibrated heuristic prediction engine.")
+            if not TORCH_AVAILABLE or not weights_path or not os.path.exists(weights_path):
+                logger.warning("Trained model weights are not configured; prediction is disabled.")
                 return
 
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            self.model = MultiTaskFoodCNN(num_classes=len(self.classes), pretrained=True)
+            self.model = MultiTaskFoodCNN(num_classes=len(self.classes), pretrained=False)
+            checkpoint = torch.load(weights_path, map_location=self.device)
+            state_dict = checkpoint.get("state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+            self.model.load_state_dict(state_dict)
             self.model.to(self.device)
             self.model.eval()
             
@@ -70,63 +73,21 @@ class FoodPredictor:
         except Exception as e:
             raise ValueError(f"Invalid image file format. Ensure it is a valid JPG/PNG: {str(e)}")
 
-        # 2. Extract features or match food category
-        predicted_key = "grilled_chicken_rice_bowl"
-        confidence = 0.947
+        if not self.is_torch_ready:
+            raise RuntimeError("Trained model weights are not configured. Set MODEL_WEIGHTS_PATH before scanning images.")
 
-        # Check filename hints if provided for testing demo
-        fn_lower = (filename or "").lower()
-        if "biryani" in fn_lower:
-            predicted_key = "chicken_biryani"
-            confidence = 0.962
-        elif "dosa" in fn_lower:
-            predicted_key = "masala_dosa"
-            confidence = 0.935
-        elif "paneer" in fn_lower:
-            predicted_key = "paneer_butter_masala"
-            confidence = 0.918
-        elif "salmon" in fn_lower or "quinoa" in fn_lower:
-            predicted_key = "salmon_quinoa_bowl"
-            confidence = 0.954
-        elif "avocado" in fn_lower or "toast" in fn_lower:
-            predicted_key = "avocado_toast"
-            confidence = 0.923
-        elif "caesar" in fn_lower or "salad" in fn_lower:
-            predicted_key = "caesar_salad"
-            confidence = 0.892
-        elif "pizza" in fn_lower:
-            predicted_key = "pepperoni_pizza"
-            confidence = 0.975
-        elif "oat" in fn_lower or "berry" in fn_lower:
-            predicted_key = "oatmeal_berry_bowl"
-            confidence = 0.941
-        elif "greek" in fn_lower:
-            predicted_key = "greek_salad"
-            confidence = 0.887
-        elif "low" in fn_lower or "blur" in fn_lower or "uncertain" in fn_lower:
-            predicted_key = "caesar_salad"
-            confidence = 0.520 # Low confidence test trigger
-        elif self.is_torch_ready:
-            try:
-                import torch
-                tensor = self.transform(image).unsqueeze(0).to(self.device)
-                with torch.no_grad():
-                    output = self.model(tensor)
-                    logits = output["class_logits"]
-                    probabilities = torch.softmax(logits, dim=1)[0]
-                    top_prob, top_idx = torch.topk(probabilities, 1)
-                    
-                    idx = int(top_idx[0].item())
-                    predicted_key = CLASS_MAP.get(idx, "grilled_chicken_rice_bowl")
-                    confidence = float(top_prob[0].item())
-                    # Ensure realistic confidence baseline
-                    confidence = max(0.72, min(0.98, confidence))
-            except Exception as e:
-                logger.error(f"Inference error: {e}")
-                predicted_key = "grilled_chicken_rice_bowl"
-                confidence = 0.947
-
-        food_info = FOOD_DATABASE.get(predicted_key, FOOD_DATABASE["grilled_chicken_rice_bowl"])
+        # The uploaded pixels are the only input to inference. No filename or sample lookup is used.
+        import torch
+        tensor = self.transform(image).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            output = self.model(tensor)
+            probabilities = torch.softmax(output["class_logits"], dim=1)[0]
+            top_prob, top_idx = torch.topk(probabilities, 1)
+            idx = int(top_idx[0].item())
+            predicted_key = CLASS_MAP[idx]
+            confidence = float(top_prob[0].item())
+            calories = float(output["calories"][0][0].item())
+            protein, carbohydrates, fat, fiber = [float(value) for value in output["macros"][0].tolist()]
         
         # Calculate inference runtime
         inference_ms = round((time.time() - start_time) * 1000 + 35, 1) # include CNN pipeline offset
@@ -135,24 +96,21 @@ class FoodPredictor:
         
         return PredictionResponse(
             id=f"pred_{uuid.uuid4().hex[:10]}",
-            foodClass=food_info["name"],
-            category=food_info.get("category", "Main Course"),
+            foodClass=predicted_key.replace("_", " ").title(),
+            category="Detected food",
             confidenceScore=round(confidence, 3),
             confidencePercentage=round(confidence * 100, 1),
-            estimatedCalories=round(food_info["calories"], 0),
-            protein=round(food_info["protein"], 1),
-            carbohydrates=round(food_info["carbohydrates"], 1),
-            fat=round(food_info["fat"], 1),
-            fiber=round(food_info.get("fiber", 0.0), 1),
-            sugar=round(food_info.get("sugar", 0.0), 1),
-            sodium=round(food_info.get("sodium", 0.0), 1),
-            potassium=round(food_info.get("potassium", 0.0), 1),
-            servingSize=food_info.get("servingSize", "1 standard serving"),
+            estimatedCalories=round(calories, 0),
+            protein=round(protein, 1),
+            carbohydrates=round(carbohydrates, 1),
+            fat=round(fat, 1),
+            fiber=round(fiber, 1),
+            servingSize="Model-estimated serving",
             isLowConfidence=is_low_conf,
-            healthRating=food_info.get("healthRating", "Balanced"),
-            dietaryTags=food_info.get("dietaryTags", []),
-            ingredients=food_info.get("ingredients", []),
-            healthTips=food_info.get("healthTips", "Balanced nutrient density supports healthy daily vitality."),
+            healthRating="Model estimate",
+            dietaryTags=[],
+            ingredients=[],
+            healthTips="Nutrition values are estimates produced by the trained model.",
             inferenceTimeMs=inference_ms
         )
 

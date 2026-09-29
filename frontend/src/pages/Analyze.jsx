@@ -11,13 +11,15 @@ import { Sparkles, Scan, HelpCircle, ShieldCheck } from 'lucide-react';
 
 export default function Analyze() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const { setActiveResult, addHistoryItem } = useHistory();
   const navigate = useNavigate();
 
-  const handleAnalyze = async ({ file, preset, previewUrl }) => {
+  const handleAnalyze = async ({ file, previewUrl }) => {
     setIsLoading(true);
+    setError(null);
     try {
-      const res = await predictFood(file, preset?.key || preset?.id);
+      const res = await predictFood(file);
       if (res.success) {
         const resultData = {
           ...res.data,
@@ -29,6 +31,7 @@ export default function Analyze() {
       }
     } catch (err) {
       console.error('Analyze error:', err);
+      setError(err.response?.data?.detail || 'The model could not analyze this image. Make sure the backend and trained model are available.');
     } finally {
       setIsLoading(false);
     }
@@ -51,6 +54,7 @@ export default function Analyze() {
           ) : (
             <div className="space-y-6">
               <FoodUploader onAnalyze={handleAnalyze} isLoading={isLoading} />
+              {error && <p className="text-sm text-rose-600">{error}</p>}
 
               {/* Best Practice Tips */}
               <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-soft">
