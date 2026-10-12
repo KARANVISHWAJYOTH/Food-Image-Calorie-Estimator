@@ -28,9 +28,19 @@ export const predictFood = async (fileOrBlob) => {
   const formData = new FormData();
   formData.append('image', fileOrBlob);
 
-  const response = await apiClient.post('/api/predict', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  let response;
+  try {
+    response = await apiClient.post('/api/predict', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  } catch (error) {
+    if (!error.response) {
+      throw new Error(
+        `Cannot connect to the backend at ${API_BASE_URL}. Start the FastAPI service on port 8000 and retry.`,
+      );
+    }
+    throw error;
+  }
 
   return { success: true, data: response.data, source: 'live_fastapi' };
 };

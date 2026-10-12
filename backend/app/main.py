@@ -60,6 +60,15 @@ async def predict_food(image: UploadFile = File(...)):
     Accepts an uploaded food photo via multipart/form-data.
     Returns classified food item, confidence score, and multi-task estimated nutritional breakdown.
     """
+    if not predictor_instance.is_torch_ready:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "The trained inference model is not loaded. Set MODEL_WEIGHTS_PATH "
+                "to a compatible trained checkpoint and restart the backend."
+            ),
+        )
+
     # Validate content type
     allowed_types = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
     if image.content_type and image.content_type not in allowed_types:

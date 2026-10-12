@@ -31,7 +31,11 @@ export default function Analyze() {
       }
     } catch (err) {
       console.error('Analyze error:', err);
-      setError(err.response?.data?.detail || 'The model could not analyze this image. Make sure the backend and trained model are available.');
+      setError(
+        err.response?.data?.detail
+          || err.message
+          || 'The model could not analyze this image. Make sure the backend and trained model are available.',
+      );
     } finally {
       setIsLoading(false);
     }
