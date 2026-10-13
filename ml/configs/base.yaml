@@ -24,9 +24,12 @@ batch_size: 32
 model:
   backbone: resnet50
   num_classes: 101
+  dropout: 0.3
+  pretrained: true
 
 training:
   learning_rate: 0.001
   lambda_cls: 1.0
   lambda_reg: 1.0
+  label_smoothing: 0.0
   num_epochs: 10
