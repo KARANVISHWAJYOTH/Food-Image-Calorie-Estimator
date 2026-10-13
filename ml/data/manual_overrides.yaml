@@ -1,0 +1,11 @@
+# Optional hand-reviewed values. Each entry replaces any automatic text match.
+# Values are dish-level estimates used as class-level modeling proxies, not ground truth.
+overrides: {}
+
+# Example:
+# overrides:
+#   apple_pie:
+#     calories: 300
+#     protein_g: 4
+#     carbohydrates_g: 42
+#     fat_g: 13

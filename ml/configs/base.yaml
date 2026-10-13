@@ -5,6 +5,19 @@ dataset:
   nutrition5k_clean_csv: data/nutrition5k_clean.csv
   combined_labels_csv: data/combined_labels.csv
 
+label_alignment:
+  strategy: fuzzy
+  confidence_threshold: 0.82
+  manual_overrides: data/manual_overrides.yaml
+  unmatched_classes_csv: data/unmatched_classes.csv
+
+data_splits:
+  train_ratio: 0.70
+  val_ratio: 0.15
+  test_ratio: 0.15
+  seed: 42
+  manifest: data/splits.json
+
 image_size: 224
 batch_size: 32
 

@@ -14,6 +14,7 @@ METADATA_FILES = (
 )
 OUTPUT_COLUMNS = (
     "dish_id",
+    "ingredient_names",
     "calories",
     "protein_g",
     "carbohydrates_g",
@@ -31,6 +32,40 @@ def load_config() -> dict:
     return config
 
 
+def extract_ingredient_names(fields: list[str], source: Path, line_number: int) -> str:
+    if len(fields) < 7:
+        raise ValueError(
+            f"{source}:{line_number}: expected num_ingrs after the six dish-level fields."
+        )
+    try:
+        ingredient_count = int(fields[6])
+    except ValueError as error:
+        raise ValueError(
+            f"{source}:{line_number}: num_ingrs must be an integer."
+        ) from error
+    if ingredient_count < 0:
+        raise ValueError(f"{source}:{line_number}: num_ingrs cannot be negative.")
+    if ingredient_count == 0:
+        return ""
+
+    ingredient_fields = fields[7:]
+    if len(ingredient_fields) % ingredient_count != 0:
+        raise ValueError(
+            f"{source}:{line_number}: ingredient fields do not match num_ingrs."
+        )
+    fields_per_ingredient = len(ingredient_fields) // ingredient_count
+    if fields_per_ingredient < 2:
+        raise ValueError(
+            f"{source}:{line_number}: ingredient records must include an ingredient name."
+        )
+
+    names = [
+        ingredient_fields[index * fields_per_ingredient + 1].strip()
+        for index in range(ingredient_count)
+    ]
+    return "; ".join(name for name in names if name)
+
+
 def read_metadata(path: Path) -> list[dict]:
     rows = []
     with path.open("r", encoding="utf-8-sig", newline="") as metadata_file:
@@ -38,10 +73,9 @@ def read_metadata(path: Path) -> list[dict]:
         for line_number, fields in enumerate(reader, start=1):
             if line_number == 1 and fields and fields[0].strip().lower() == "dish_id":
                 continue
-            if len(fields) < 6:
+            if len(fields) < 7:
                 raise ValueError(
-                    f"{path}:{line_number}: expected at least 6 leading fields "
-                    "(dish_id, calories, mass, fat, carbs, protein)."
+                    f"{path}:{line_number}: expected dish fields followed by num_ingrs."
                 )
 
             dish_id = fields[0].strip()
@@ -63,9 +97,11 @@ def read_metadata(path: Path) -> list[dict]:
                     f"{path}:{line_number}: nutrition values must be finite and non-negative."
                 )
 
+            ingredient_names = extract_ingredient_names(fields, path, line_number)
             rows.append(
                 {
                     "dish_id": dish_id,
+                    "ingredient_names": ingredient_names,
                     "calories": calories,
                     "protein_g": protein_g,
                     "carbohydrates_g": carbohydrates_g,
