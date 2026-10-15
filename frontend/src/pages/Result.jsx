@@ -7,14 +7,11 @@ import {
   RotateCcw,
   BookmarkCheck,
   History,
-  Share2,
   Download,
   Copy,
   Check,
   Cpu,
   Flame,
-  Info,
-  Sliders,
   Scale
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
@@ -32,20 +29,20 @@ export default function Result() {
 
   const result = activeResult;
 
-  useEffect(() => {
-    if (!result) navigate('/analyze', { replace: true });
-  }, [result, navigate]);
-
-  if (!result) return null;
-
   const [portion, setPortion] = useState(1.0);
   const [toastMsg, setToastMsg] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (!result) {
+      navigate('/analyze', { replace: true });
+    }
+  }, [result, navigate]);
+
+  useEffect(() => {
     // Trigger celebratory confetti if high confidence
-    if (result.confidenceScore >= 0.85 && !result.isLowConfidence) {
+    if (result && result.confidenceScore >= 0.85 && !result.isLowConfidence) {
       try {
         confetti({
           particleCount: 40,
@@ -53,9 +50,11 @@ export default function Result() {
           origin: { y: 0.6 },
           colors: ['#10b981', '#34d399', '#059669', '#f59e0b'],
         });
-      } catch (e) {}
+      } catch (_e) {}
     }
   }, [result]);
+
+  if (!result) return null;
 
   const isLowConfidence = result.isLowConfidence || result.confidenceScore < 0.65;
 

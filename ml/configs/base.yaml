@@ -38,6 +38,7 @@ training:
   stage2_learning_rate: 0.0001
   stage2_unfreeze_layers: 1
   use_amp: true
+  # TODO: Set the winning pair after reviewing ml/training/logs/loss_weight_comparison.csv.
   lambda_cls: 1.0
   lambda_reg: 1.0
   label_smoothing: 0.0

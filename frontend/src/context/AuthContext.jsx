@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { loginUser as apiLogin, registerUser as apiRegister } from '../services/api';
+import {
+  loginUser as apiLogin,
+  registerUser as apiRegister,
+  updateUserProfileApi,
+} from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -86,17 +90,20 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const updateProfile = (updatedFields) => {
+  const updateProfile = async (updatedFields) => {
     setUser((prev) => ({
       ...prev,
       ...updatedFields,
     }));
+    await updateUserProfileApi(updatedFields);
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('nutrivision_user');
+    localStorage.removeItem('nutrivision_token');
   };
+
 
   return (
     <AuthContext.Provider

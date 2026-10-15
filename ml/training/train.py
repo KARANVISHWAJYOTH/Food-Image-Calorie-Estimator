@@ -110,6 +110,7 @@ def _run_epoch(
     total_loss = 0.0
     classification_loss = 0.0
     regression_loss = 0.0
+    nutrition_absolute_error = torch.zeros(4, device=device)
     correct = 0
     num_samples = 0
 
@@ -145,17 +146,26 @@ def _run_epoch(
         total_loss += batch_total.detach().item() * batch_size
         classification_loss += batch_classification.detach().item() * batch_size
         regression_loss += batch_regression.detach().item() * batch_size
+        nutrition_absolute_error += (
+            outputs[1].detach().float().sub(nutrition_targets).abs().sum(dim=0)
+        )
         correct += (outputs[0].argmax(dim=1) == class_targets).sum().item()
         num_samples += batch_size
 
     if num_samples == 0:
         raise ValueError("Cannot compute epoch metrics for an empty data loader.")
 
+    nutrition_mae_by_target = nutrition_absolute_error.cpu() / num_samples
     return {
         "loss": total_loss / num_samples,
         "classification_loss": classification_loss / num_samples,
         "regression_loss": regression_loss / num_samples,
         "accuracy": correct / num_samples,
+        "nutrition_mae": nutrition_mae_by_target.mean().item(),
+        "calories_mae": nutrition_mae_by_target[0].item(),
+        "protein_mae": nutrition_mae_by_target[1].item(),
+        "carbohydrates_mae": nutrition_mae_by_target[2].item(),
+        "fat_mae": nutrition_mae_by_target[3].item(),
     }
 
 
@@ -385,6 +395,16 @@ def train(args: argparse.Namespace) -> Path:
         "val_classification_loss",
         "val_regression_loss",
         "val_accuracy",
+        "train_nutrition_mae",
+        "val_nutrition_mae",
+        "train_calories_mae",
+        "val_calories_mae",
+        "train_protein_mae",
+        "val_protein_mae",
+        "train_carbohydrates_mae",
+        "val_carbohydrates_mae",
+        "train_fat_mae",
+        "val_fat_mae",
     )
     with log_path.open("w", newline="", encoding="utf-8") as metrics_file:
         writer = csv.DictWriter(metrics_file, fieldnames=fieldnames)

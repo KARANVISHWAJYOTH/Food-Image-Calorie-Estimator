@@ -286,3 +286,26 @@ can slow convergence or underfit; lighter augmentation can converge faster but
 may generalize less well. No run metrics are currently included here, so the
 default has not been changed. Share the three CSVs' epoch, validation-loss, and
 validation-accuracy columns to select a winner based on observed results.
+
+## 7. Tune multi-task loss weights
+
+Edit `WEIGHT_PAIRS` in `ml/training/sweep_loss_weights.py`, or pass one or more
+`--pair CLS,REG` options, then run a short sweep from the repository root:
+
+```bash
+python -m ml.training.sweep_loss_weights --epochs 3
+```
+
+The script trains each pair using the same data split and seed, writes completed
+validation results to
+`ml/training/logs/loss_weight_comparison.csv`, and removes temporary checkpoints
+after the sweep. Override the default output with `--output-csv`; optional
+`--max-train-samples` and `--max-val-samples` make a screening run faster. The
+CSV includes validation classification accuracy, aggregate nutrition MAE, and
+per-target MAEs. Aggregate nutrition MAE averages absolute errors over calories
+and the three gram-valued targets, so also inspect the per-target columns.
+
+Open `ml/notebooks/03_loss_weight_analysis.ipynb` to visualize the
+accuracy/MAE trade-off. The sweep does not modify `base.yaml`; update
+`training.lambda_cls` and `training.lambda_reg` only after reviewing the
+observed results and validating promising pairs with longer runs.

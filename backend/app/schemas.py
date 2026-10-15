@@ -36,16 +36,24 @@ class PredictionResponse(BaseModel):
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 class HistoryItem(BaseModel):
-    id: str
+    id: Optional[str] = None
     foodClass: str
     calories: float
     protein: float
-    carbs: float
+    carbohydrates: Optional[float] = None
+    carbs: Optional[float] = None
     fat: float
-    confidenceScore: float
+    fiber: Optional[float] = 0.0
+    confidenceScore: Optional[float] = 1.0
+    confidencePercentage: Optional[float] = None
     imageUrl: Optional[str] = None
-    timestamp: str
+    timestamp: Optional[str] = None
     portion: Optional[float] = 1.0
+    servingSize: Optional[str] = None
+    healthRating: Optional[str] = None
+    dietaryTags: Optional[List[str]] = Field(default_factory=list)
+    healthTips: Optional[str] = None
+    isLowConfidence: Optional[bool] = False
 
 class HealthResponse(BaseModel):
     status: str = "healthy"
@@ -53,3 +61,34 @@ class HealthResponse(BaseModel):
     modelArchitecture: str = "MultiTaskFoodCNN (ResNet50 Backbone + Dual Heads)"
     device: str = "cpu"
     version: str = "1.0.0"
+
+class UserRegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: Optional[str] = "Nutrition Explorer"
+    dailyCalorieGoal: Optional[int] = 2000
+    dailyProteinGoal: Optional[int] = 120
+
+class UserLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str = "Member"
+    dailyCalorieGoal: int = 2000
+    dailyProteinGoal: int = 120
+    createdAt: str
+
+class AuthResponse(BaseModel):
+    success: bool = True
+    user: UserResponse
+    token: str
+
+class UserProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    dailyCalorieGoal: Optional[int] = None
+    dailyProteinGoal: Optional[int] = None
+

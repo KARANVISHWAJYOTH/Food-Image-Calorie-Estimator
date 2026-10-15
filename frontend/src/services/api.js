@@ -10,6 +10,15 @@ const apiClient = axios.create({
   },
 });
 
+// Attach JWT token to requests if available
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('nutrivision_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Check if FastAPI backend server is alive
 export const checkApiHealth = async () => {
   try {
@@ -98,45 +107,89 @@ export const deletePrediction = async (id) => {
 };
 
 /**
- * Authentication mock & API helpers
+ * Authentication API helpers with live backend + offline fallback
  */
 export const loginUser = async (email, password) => {
-  // Simulate auth latency
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  
-  if (email && password.length >= 4) {
-    const user = {
-      id: 'usr_karan_01',
-      name: email.split('@')[0] || 'Karan',
-      email: email,
-      role: 'Premium Member',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      dailyCalorieGoal: 2200,
-      dailyProteinGoal: 130,
-      dailyCarbGoal: 240,
-      dailyFatGoal: 65,
-      createdAt: '2026-01-15T10:00:00Z',
+  try {
+    const response = await apiClient.post('/api/auth/login', { email, password });
+    if (response.data?.token) {
+      localStorage.setItem('nutrivision_token', response.data.token);
+    }
+    return {
+      success: true,
+      user: {
+        ...response.data.user,
+        dailyCalorieGoal: response.data.user.dailyCalorieGoal || 2200,
+        dailyProteinGoal: response.data.user.dailyProteinGoal || 130,
+      },
+      token: response.data.token,
     };
-    return { success: true, user, token: 'jwt_mock_token_nutrivision' };
+  } catch (error) {
+    // Fallback for offline demo mode
+    if (!error.response && email && password.length >= 4) {
+      const demoUser = {
+        id: 'usr_karan_01',
+        name: email.split('@')[0] || 'Karan',
+        email: email,
+        role: 'Premium Member',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+        dailyCalorieGoal: 2200,
+        dailyProteinGoal: 130,
+        dailyCarbGoal: 240,
+        dailyFatGoal: 65,
+        createdAt: '2026-01-15T10:00:00Z',
+      };
+      return { success: true, user: demoUser, token: 'jwt_mock_token_nutrivision' };
+    }
+    const msg = error.response?.data?.detail || error.message || 'Login failed';
+    throw new Error(msg);
   }
-  throw new Error('Invalid email or password. Password must be at least 4 characters.');
 };
 
 export const registerUser = async (username, email, password) => {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-  const user = {
-    id: `usr_${Math.random().toString(36).substr(2, 7)}`,
-    name: username || 'Nutrition Explorer',
-    email: email,
-    role: 'Member',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-    dailyCalorieGoal: 2000,
-    dailyProteinGoal: 120,
-    dailyCarbGoal: 220,
-    dailyFatGoal: 60,
-    createdAt: new Date().toISOString(),
-  };
-  return { success: true, user, token: 'jwt_mock_token_nutrivision' };
+  try {
+    const response = await apiClient.post('/api/auth/register', {
+      email,
+      password,
+      name: username,
+    });
+    if (response.data?.token) {
+      localStorage.setItem('nutrivision_token', response.data.token);
+    }
+    return {
+      success: true,
+      user: response.data.user,
+      token: response.data.token,
+    };
+  } catch (error) {
+    if (!error.response) {
+      const demoUser = {
+        id: `usr_${Math.random().toString(36).substr(2, 7)}`,
+        name: username || 'Nutrition Explorer',
+        email: email,
+        role: 'Member',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+        dailyCalorieGoal: 2000,
+        dailyProteinGoal: 120,
+        dailyCarbGoal: 220,
+        dailyFatGoal: 60,
+        createdAt: new Date().toISOString(),
+      };
+      return { success: true, user: demoUser, token: 'jwt_mock_token_nutrivision' };
+    }
+    const msg = error.response?.data?.detail || error.message || 'Registration failed';
+    throw new Error(msg);
+  }
+};
+
+export const updateUserProfileApi = async (updates) => {
+  try {
+    const response = await apiClient.patch('/api/auth/profile', updates);
+    return response.data;
+  } catch (error) {
+    return null;
+  }
 };
 
 export default apiClient;
+
