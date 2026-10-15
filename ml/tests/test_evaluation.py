@@ -18,7 +18,7 @@ def test_compute_classification_metrics_exact() -> None:
         [10.0, 1.0, 0.0],  # predicts 0, true 0
         [0.0, 5.0, 1.0],   # predicts 1, true 1
         [1.0, 2.0, 8.0],   # predicts 2, true 2
-        [9.0, 0.0, 1.0],   # predicts 0, true 1 (misclassified)
+        [9.0, 2.0, 1.0],   # predicts 0, true 1 (misclassified, but true class 1 is in top-2)
     ])
     targets = np.array([0, 1, 2, 1])
 

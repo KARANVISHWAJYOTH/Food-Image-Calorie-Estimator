@@ -1,4 +1,18 @@
-"""Multi-task CNN for food classification and nutrition regression."""
+"""Multi-task CNN for food classification and nutrition regression.
+
+Target Consistency & Architecture:
+- classification_head: Multi-class logits for food category classification (num_classes).
+- regression_head: Continuous regression for the 4 ground-truth nutrition targets:
+  [Calories (kcal), Protein (g), Carbohydrates (g), Fat (g)].
+
+Note on Dietary Fiber:
+Nutrition5k dataset ground truth only records total calories, protein, carbohydrates, and fat.
+Dietary fiber is not recorded by Nutrition5k sensor logs. To avoid training an ungrounded
+head on synthetic noise or hallucinated labels, the neural network strictly predicts
+the 4 ground-truth targets (NUTRITION_OUTPUTS = 4). At inference time, dietary fiber is
+explicitly and deterministically derived in backend/app/predictor.py from carbohydrates
+and food category using USDA nutritional ratio benchmarks.
+"""
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -11,10 +25,11 @@ from torchvision import models
 
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "configs" / "base.yaml"
 NUTRITION_OUTPUTS = 4
+NUTRITION_TARGET_NAMES = ("calories", "protein", "carbohydrates", "fat")
 
 
 class MultiTaskCNN(nn.Module):
-    """Predict a food class and four nutrition values from an image."""
+    """Predict a food class and four nutrition values [calories, protein, carbs, fat] from an image."""
 
     def __init__(
         self,

@@ -1,4 +1,11 @@
-"""Loss functions for multi-task food classification and nutrition regression."""
+"""Loss functions for multi-task food classification and nutrition regression.
+
+Target Consistency:
+Regression loss is calculated over the 4 ground-truth continuous targets:
+[calories, protein, carbohydrates, fat]. Dietary fiber is excluded from loss
+optimization as it is not recorded in Nutrition5k sensor ground truth; it is
+deterministically derived downstream at inference time in backend/app/predictor.py.
+"""
 
 from collections.abc import Mapping
 from math import isfinite
@@ -34,7 +41,11 @@ class ClassificationLoss(nn.Module):
 
 
 class RegressionLoss(nn.Module):
-    """Smooth L1 (Huber) loss for the four nutrition predictions."""
+    """Smooth L1 (Huber) loss for the four nutrition predictions [calories, protein, carbs, fat].
+
+    Dietary fiber is derived downstream in predictor.py from carbohydrates and food class
+    rather than predicted here, because Nutrition5k ground truth does not record fiber.
+    """
 
     def __init__(self, beta: float = 1.0) -> None:
         super().__init__()
@@ -55,7 +66,7 @@ class RegressionLoss(nn.Module):
         if nutrition_outputs.shape[-1] != 4 or nutrition_targets.shape[-1] != 4:
             raise ValueError(
                 "Nutrition predictions and targets must each have four values "
-                "(calories, protein, carbs, fat)."
+                "(calories, protein, carbs, fat). Fiber is derived downstream in predictor.py."
             )
         return self.loss(nutrition_outputs, nutrition_targets)
 

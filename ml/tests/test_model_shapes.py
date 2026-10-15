@@ -5,10 +5,17 @@ import torch
 
 from ml.models.multitask_cnn import (
     MultiTaskCNN,
+    NUTRITION_OUTPUTS,
+    NUTRITION_TARGET_NAMES,
     _backbone_layers,
     freeze_backbone,
     unfreeze_backbone,
 )
+
+
+def test_nutrition_target_constants() -> None:
+    assert NUTRITION_OUTPUTS == 4
+    assert NUTRITION_TARGET_NAMES == ("calories", "protein", "carbohydrates", "fat")
 
 
 @pytest.mark.parametrize("backbone", ["resnet50", "efficientnet_b0"])
@@ -26,7 +33,7 @@ def test_multitask_cnn_output_shapes(backbone: str) -> None:
         class_logits, nutrition_outputs = model(images)
 
     assert class_logits.shape == (batch_size, num_classes)
-    assert nutrition_outputs.shape == (batch_size, 4)
+    assert nutrition_outputs.shape == (batch_size, NUTRITION_OUTPUTS)
 
 
 @pytest.mark.parametrize("backbone", ["resnet50", "efficientnet_b0"])

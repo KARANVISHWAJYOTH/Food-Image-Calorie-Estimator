@@ -1,8 +1,7 @@
-"""Tests for multi-task training losses."""
-
+import pytest
 import torch
 
-from ml.training.losses import MultiTaskLoss
+from ml.training.losses import MultiTaskLoss, RegressionLoss
 
 
 def test_multitask_loss_returns_weighted_total_and_task_losses() -> None:
@@ -37,3 +36,24 @@ def test_multitask_loss_returns_weighted_total_and_task_losses() -> None:
     assert regression_loss.ndim == 0
     assert classification_loss.item() >= 0.0
     assert regression_loss.item() >= 0.0
+
+
+def test_regression_loss_rejects_non_4_target_shapes() -> None:
+    reg_loss = RegressionLoss()
+    valid_pred = torch.randn(2, 4)
+    valid_target = torch.randn(2, 4)
+    loss = reg_loss(valid_pred, valid_target)
+    assert loss.ndim == 0
+
+    # Reject 5 targets (e.g. attempting to predict fiber directly without ground truth)
+    pred_5 = torch.randn(2, 5)
+    target_5 = torch.randn(2, 5)
+    with pytest.raises(ValueError, match="Nutrition predictions and targets must each have four values"):
+        reg_loss(pred_5, target_5)
+
+    # Reject 3 targets
+    pred_3 = torch.randn(2, 3)
+    target_3 = torch.randn(2, 3)
+    with pytest.raises(ValueError, match="Nutrition predictions and targets must each have four values"):
+        reg_loss(pred_3, target_3)
+

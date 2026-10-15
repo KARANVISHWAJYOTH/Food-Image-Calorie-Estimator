@@ -34,17 +34,21 @@ from ml.training.losses import MultiTaskLoss
 
 
 class ManifestDataset(Dataset):
-    """View global manifest indices with a transform specific to each split."""
+    """View global manifest indices with a transform specific to each split and optional z-score target normalization."""
 
     def __init__(
         self,
         samples: list[tuple],
         indices: list[int],
         transform: Any,
+        target_mean: torch.Tensor | None = None,
+        target_std: torch.Tensor | None = None,
     ) -> None:
         self.samples = samples
         self.indices = indices
         self.transform = transform
+        self.target_mean = target_mean
+        self.target_std = target_std
 
     def __len__(self) -> int:
         return len(self.indices)
@@ -57,7 +61,10 @@ class ManifestDataset(Dataset):
             image = image_file.convert("RGB")
         image_tensor = self.transform(image)
         nutrition_target = torch.tensor(nutrition_values, dtype=torch.float32)
+        if self.target_mean is not None and self.target_std is not None:
+            nutrition_target = (nutrition_target - self.target_mean) / self.target_std
         return image_tensor, class_index, nutrition_target
+
 
 
 def _load_config(config_path: Path) -> dict[str, Any]:
@@ -104,6 +111,8 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer | None = None,
     amp_enabled: bool = False,
     scaler: torch.amp.GradScaler | None = None,
+    target_mean: torch.Tensor | None = None,
+    target_std: torch.Tensor | None = None,
 ) -> dict[str, float]:
     training = optimizer is not None
     model.train(training)
@@ -113,6 +122,9 @@ def _run_epoch(
     nutrition_absolute_error = torch.zeros(4, device=device)
     correct = 0
     num_samples = 0
+
+    device_mean = target_mean.to(device) if target_mean is not None else None
+    device_std = target_std.to(device) if target_std is not None else None
 
     for images, class_targets, nutrition_targets in loader:
         images = images.to(device)
@@ -146,14 +158,21 @@ def _run_epoch(
         total_loss += batch_total.detach().item() * batch_size
         classification_loss += batch_classification.detach().item() * batch_size
         regression_loss += batch_regression.detach().item() * batch_size
-        nutrition_absolute_error += (
-            outputs[1].detach().float().sub(nutrition_targets).abs().sum(dim=0)
-        )
+
+        pred_nutr = outputs[1].detach().float()
+        true_nutr = nutrition_targets.detach().float()
+        if device_mean is not None and device_std is not None:
+            # De-normalize to compute error in physical units (kcal and grams)
+            pred_nutr = pred_nutr * device_std + device_mean
+            true_nutr = true_nutr * device_std + device_mean
+
+        nutrition_absolute_error += pred_nutr.sub(true_nutr).abs().sum(dim=0)
         correct += (outputs[0].argmax(dim=1) == class_targets).sum().item()
         num_samples += batch_size
 
     if num_samples == 0:
         raise ValueError("Cannot compute epoch metrics for an empty data loader.")
+
 
     nutrition_mae_by_target = nutrition_absolute_error.cpu() / num_samples
     return {
@@ -290,6 +309,31 @@ def train(args: argparse.Namespace) -> Path:
     if args.max_val_samples is not None and args.max_val_samples < len(val_indices):
         val_indices = subset_randomizer.sample(val_indices, args.max_val_samples)
 
+    # Compute train-set z-score normalization parameters for regression targets
+    train_nutrition_list = [samples[idx][2] for idx in train_indices]
+    train_nutrition_tensor = torch.tensor(train_nutrition_list, dtype=torch.float32)
+    target_mean = train_nutrition_tensor.mean(dim=0)
+    target_std = train_nutrition_tensor.std(dim=0)
+    target_std = torch.where(target_std < 1e-4, torch.ones_like(target_std), target_std)
+
+    target_stats = {
+        "mean": [round(float(v), 4) for v in target_mean.tolist()],
+        "std": [round(float(v), 4) for v in target_std.tolist()],
+        "target_names": ["calories", "protein", "carbohydrates", "fat"],
+    }
+    LOGGER.info(
+        "Computed regression target stats from %d train samples: mean=%s, std=%s",
+        len(train_indices),
+        target_stats["mean"],
+        target_stats["std"],
+    )
+
+    class_names = getattr(train_source, "classes", None)
+    if not class_names:
+        classes_txt = _resolve_ml_path("data/food101/food-101/meta/classes.txt")
+        if classes_txt.is_file():
+            class_names = [line.strip() for line in classes_txt.read_text(encoding="utf-8").splitlines() if line.strip()]
+
     preprocessing_config = config.get("preprocessing", {})
     if not isinstance(preprocessing_config, dict):
         raise ValueError("The 'preprocessing' config section must be a mapping.")
@@ -298,11 +342,15 @@ def train(args: argparse.Namespace) -> Path:
         samples,
         train_indices,
         get_train_transform(image_size, preset=augmentation_preset),
+        target_mean=target_mean,
+        target_std=target_std,
     )
     val_dataset = ManifestDataset(
         samples,
         val_indices,
         get_eval_transform(image_size),
+        target_mean=target_mean,
+        target_std=target_std,
     )
     generator = torch.Generator().manual_seed(random_seed)
     train_loader = DataLoader(
@@ -446,6 +494,8 @@ def train(args: argparse.Namespace) -> Path:
                     optimizer,
                     amp_enabled=amp_enabled,
                     scaler=scaler,
+                    target_mean=target_mean,
+                    target_std=target_std,
                 )
                 with torch.no_grad():
                     val_metrics = _run_epoch(
@@ -454,6 +504,8 @@ def train(args: argparse.Namespace) -> Path:
                         criterion,
                         device,
                         amp_enabled=amp_enabled,
+                        target_mean=target_mean,
+                        target_std=target_std,
                     )
 
                 if scheduler is not None:
@@ -468,24 +520,32 @@ def train(args: argparse.Namespace) -> Path:
                 save_checkpoint(
                     model,
                     checkpoint_dir / f"epoch_{epoch:03d}.pt",
-                    {
+                    metadata={
                         **metadata,
                         "epoch": epoch,
                         "stage": stage_name,
                         "val_loss": val_metrics["loss"],
                     },
+                    class_names=class_names,
+                    target_stats=target_stats,
+                    config=config,
+                    val_metrics=val_metrics,
                 )
                 if val_metrics["loss"] < best_val_loss:
                     best_val_loss = val_metrics["loss"]
                     save_checkpoint(
                         model,
                         checkpoint_dir / "best.pt",
-                        {
+                        metadata={
                             **metadata,
                             "epoch": epoch,
                             "stage": stage_name,
                             "val_loss": best_val_loss,
                         },
+                        class_names=class_names,
+                        target_stats=target_stats,
+                        config=config,
+                        val_metrics=val_metrics,
                     )
 
                 LOGGER.info(

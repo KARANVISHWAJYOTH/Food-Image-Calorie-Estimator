@@ -4,6 +4,7 @@ from collections import Counter
 import logging
 import math
 from pathlib import Path
+from typing import Any
 
 import torch
 from torch.utils.data import Dataset
@@ -11,6 +12,8 @@ from torch.utils.data import Dataset
 
 ML_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ML_DIR / "configs" / "base.yaml"
+# The 4 continuous nutrition targets recorded in Nutrition5k / Food-101 aligned proxy.
+# Fiber is not measured in Nutrition5k ground-truth sensor logs and is derived downstream in predictor.py.
 NUTRITION_COLUMNS = ("calories", "protein_g", "carbohydrates_g", "fat_g")
 LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +49,8 @@ class Food101NutritionDataset(Dataset):
 
     Class indices follow Food-101's ``classes.txt`` order. The nutrition target
     is a float32 tensor ordered as calories, protein, carbohydrates, and fat.
+    Dietary fiber is intentionally excluded because Nutrition5k does not measure
+    fiber; it is derived downstream at inference time in backend/app/predictor.py.
     Classes without a complete resolved target are excluded and summarized in a
     warning; image paths and labels are read from the official split manifest.
     """
@@ -57,9 +62,14 @@ class Food101NutritionDataset(Dataset):
         data_dir: str | Path | None = None,
         labels_csv: str | Path | None = None,
         config_path: str | Path = CONFIG_PATH,
+        target_mean: torch.Tensor | None = None,
+        target_std: torch.Tensor | None = None,
     ) -> None:
         if split not in {"train", "test"}:
             raise ValueError("split must be either 'train' or 'test'.")
+
+        self.target_mean = target_mean
+        self.target_std = target_std
 
         config_path = Path(config_path)
         config = _load_config(config_path)
@@ -186,8 +196,17 @@ class Food101NutritionDataset(Dataset):
                 "Review combined_labels.csv and manual overrides."
             )
 
-    def __len__(self) -> int:
-        return len(self.samples)
+    def compute_target_stats(self) -> dict[str, Any]:
+        """Compute mean and standard deviation across all dataset targets for z-score normalization."""
+        targets = torch.tensor([sample[2] for sample in self.samples], dtype=torch.float32)
+        mean = targets.mean(dim=0)
+        std = targets.std(dim=0)
+        std = torch.where(std < 1e-4, torch.ones_like(std), std)
+        return {
+            "mean": [round(float(v), 4) for v in mean.tolist()],
+            "std": [round(float(v), 4) for v in std.tolist()],
+            "target_names": ["calories", "protein", "carbohydrates", "fat"],
+        }
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, int, torch.Tensor]:
         from PIL import Image
@@ -199,4 +218,6 @@ class Food101NutritionDataset(Dataset):
             image = image_file.convert("RGB")
         image_tensor = self.transform(image)
         nutrition_target = torch.tensor(nutrition_values, dtype=torch.float32)
+        if self.target_mean is not None and self.target_std is not None:
+            nutrition_target = (nutrition_target - self.target_mean) / self.target_std
         return image_tensor, class_index, nutrition_target
