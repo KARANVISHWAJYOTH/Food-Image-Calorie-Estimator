@@ -43,6 +43,7 @@ class MultiTaskCNN(nn.Module):
             raise ValueError(f"pretrained must be a boolean; got {pretrained!r}.")
 
         backbone_name = backbone.lower()
+        self.backbone_name = backbone_name
         if backbone_name == "resnet50":
             weights = models.ResNet50_Weights.DEFAULT if pretrained else None
             network = models.resnet50(weights=weights)
@@ -102,3 +103,51 @@ class MultiTaskCNN(nn.Module):
             dropout=model_config.get("dropout", 0.3),
             pretrained=model_config.get("pretrained", True),
         )
+
+    def train(self, mode: bool = True) -> "MultiTaskCNN":
+        """Set training mode while keeping fully frozen backbone stages in eval mode."""
+        super().train(mode)
+        if mode:
+            for stage in _backbone_layers(self):
+                if not any(parameter.requires_grad for parameter in stage.parameters()):
+                    stage.eval()
+        return self
+
+
+def _backbone_layers(model: MultiTaskCNN) -> list[nn.Module]:
+    """Return parameterized stages in shallow-to-deep backbone order."""
+    if model.backbone_name == "resnet50":
+        stage_indices = (0, 1, 4, 5, 6, 7)
+        return [model.backbone[index] for index in stage_indices]
+
+    features = model.backbone[0]
+    return [
+        stage
+        for stage in features.children()
+        if next(stage.parameters(), None) is not None
+    ]
+
+
+def freeze_backbone(model: MultiTaskCNN) -> None:
+    """Freeze all backbone parameters; prediction heads remain trainable."""
+    for parameter in model.backbone.parameters():
+        parameter.requires_grad = False
+    model.backbone.eval()
+
+
+def unfreeze_backbone(model: MultiTaskCNN, num_layers: int) -> None:
+    """Unfreeze the ``num_layers`` deepest backbone stages, leaving earlier ones frozen."""
+    if not isinstance(num_layers, int) or isinstance(num_layers, bool) or num_layers < 1:
+        raise ValueError(f"num_layers must be a positive integer; got {num_layers!r}.")
+
+    layers = _backbone_layers(model)
+    if num_layers > len(layers):
+        raise ValueError(
+            f"Cannot unfreeze {num_layers} layers of {model.backbone_name}; "
+            f"it has {len(layers)} parameterized backbone stages."
+        )
+
+    freeze_backbone(model)
+    for layer in layers[-num_layers:]:
+        for parameter in layer.parameters():
+            parameter.requires_grad = True

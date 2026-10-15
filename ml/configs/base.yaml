@@ -21,6 +21,9 @@ data_splits:
 image_size: 224
 batch_size: 32
 
+preprocessing:
+  augmentation_preset: standard
+
 model:
   backbone: resnet50
   num_classes: 101
@@ -29,6 +32,12 @@ model:
 
 training:
   learning_rate: 0.001
+  stage1_epochs: 2
+  stage1_learning_rate: 0.001
+  stage2_epochs: 8
+  stage2_learning_rate: 0.0001
+  stage2_unfreeze_layers: 1
+  use_amp: true
   lambda_cls: 1.0
   lambda_reg: 1.0
   label_smoothing: 0.0

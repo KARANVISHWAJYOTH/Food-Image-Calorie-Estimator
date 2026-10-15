@@ -10,6 +10,7 @@ ML_DIR = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ML_DIR / "configs" / "base.yaml"
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+AUGMENTATION_PRESETS = ("light", "standard", "strong")
 
 
 def _get_image_size(image_size: int | None) -> int:
@@ -28,11 +29,24 @@ def _get_image_size(image_size: int | None) -> int:
     return image_size
 
 
-def get_train_transform(image_size: int | None = None) -> transforms.Compose:
-    """Build the food-photo augmentation pipeline for training."""
+def get_train_transform(
+    image_size: int | None = None,
+    preset: str = "standard",
+) -> transforms.Compose:
+    """Build the configured food-photo augmentation pipeline for training."""
     size = _get_image_size(image_size)
-    return transforms.Compose(
-        [
+    if preset == "light":
+        augmentation = [
+            transforms.RandomResizedCrop(
+                size,
+                scale=(0.9, 1.0),
+                interpolation=InterpolationMode.BILINEAR,
+                antialias=True,
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+        ]
+    elif preset == "standard":
+        augmentation = [
             transforms.RandomRotation(
                 degrees=8,
                 interpolation=InterpolationMode.BILINEAR,
@@ -50,6 +64,37 @@ def get_train_transform(image_size: int | None = None) -> transforms.Compose:
                 saturation=0.1,
                 hue=0.02,
             ),
+        ]
+    elif preset == "strong":
+        augmentation = [
+            transforms.RandomRotation(
+                degrees=18,
+                interpolation=InterpolationMode.BILINEAR,
+            ),
+            transforms.RandomResizedCrop(
+                size,
+                scale=(0.65, 1.0),
+                ratio=(0.8, 1.25),
+                interpolation=InterpolationMode.BILINEAR,
+                antialias=True,
+            ),
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.ColorJitter(
+                brightness=0.3,
+                contrast=0.3,
+                saturation=0.25,
+                hue=0.05,
+            ),
+        ]
+    else:
+        raise ValueError(
+            f"Unknown augmentation preset {preset!r}. "
+            f"Choose one of: {', '.join(AUGMENTATION_PRESETS)}."
+        )
+
+    return transforms.Compose(
+        [
+            *augmentation,
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD),
         ]
