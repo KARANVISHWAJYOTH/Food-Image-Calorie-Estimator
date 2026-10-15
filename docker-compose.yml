@@ -10,6 +10,8 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
+      - SECRET_KEY=${SECRET_KEY:-nutrivision_super_secret_jwt_key_2026_change_in_prod}
+      - MODEL_VARIANT=fp32
     volumes:
       - ./backend/app:/app/app
     restart: unless-stopped

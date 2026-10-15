@@ -2,10 +2,12 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 python-multipart==0.0.20
+passlib[bcrypt]>=1.7.4
+bcrypt==4.0.1
+python-jose[cryptography]>=3.3.0
 torch>=2.0.0
 torchvision>=0.15.0
 pillow>=10.0.0
 numpy>=1.24.0
 pandas>=2.0.0
 httpx>=0.28.0
-

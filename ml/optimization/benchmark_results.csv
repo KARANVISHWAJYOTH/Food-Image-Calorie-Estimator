@@ -1,0 +1,6 @@
+model_name,type,size_mb,size_delta,cpu_mean_ms,cpu_p50_ms,cpu_p95_ms,cpu_fps,cpu_speedup,gpu_mean_ms,top1_accuracy,top5_accuracy,calorie_mae_kcal
+FP32 Baseline,FP32 Dense,98.4,Baseline,42.45,41.66,46.39,23.6,1.0x,,0.0,0.0,0.0
+Pruned (20%),20% Conv L1 Sparsity,96.19,-2.2%,45.77,45.36,53.05,21.8,0.93x,,0.0,0.0,0.0
+Pruned (30%),30% Conv L1 Sparsity,96.19,-2.2%,42.59,42.29,47.08,23.5,1.0x,,0.0,0.0,0.0
+Pruned (50%),50% Conv L1 Sparsity,96.19,-2.2%,41.77,41.68,45.7,23.9,1.02x,,0.0,0.0,0.0
+INT8 Quantized,Dynamic INT8 Linear,91.65,-6.9%,42.62,42.68,46.56,23.5,1.0x,,0.0,0.0,0.0

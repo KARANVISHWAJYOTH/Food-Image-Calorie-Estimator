@@ -10,14 +10,51 @@ const apiClient = axios.create({
   },
 });
 
-// Attach JWT token to requests if available
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('nutrivision_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// Request Interceptor: Attach JWT Bearer token to all outgoing requests
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('nutrivision_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response Interceptor: On 401 Unauthorized, clear session, broadcast event, and redirect to /login
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      const requestUrl = error.config?.url || '';
+      const isAuthEndpoint =
+        requestUrl.includes('/api/auth/login') ||
+        requestUrl.includes('/api/auth/signup') ||
+        requestUrl.includes('/api/auth/register');
+
+      // Only trigger session expiration for protected resources, not failed login attempts
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('nutrivision_token');
+        localStorage.removeItem('nutrivision_user');
+
+        const sessionExpiredMsg = 'Your session has expired. Please log in again.';
+        sessionStorage.setItem('nutrivision_session_expired', sessionExpiredMsg);
+
+        window.dispatchEvent(
+          new CustomEvent('auth:session-expired', {
+            detail: { message: sessionExpiredMsg },
+          })
+        );
+
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login?expired=true';
+        }
+      }
+    }
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
 // Check if FastAPI backend server is alive
 export const checkApiHealth = async () => {
@@ -31,7 +68,7 @@ export const checkApiHealth = async () => {
 
 /**
  * Predict food from uploaded image file.
- * Sends the image to the live model inference API.
+ * Sends the image to the live model inference API with Bearer token authentication.
  */
 export const predictFood = async (fileOrBlob) => {
   const formData = new FormData();
@@ -45,7 +82,7 @@ export const predictFood = async (fileOrBlob) => {
   } catch (error) {
     if (!error.response) {
       throw new Error(
-        `Cannot connect to the backend at ${API_BASE_URL}. Start the FastAPI service on port 8000 and retry.`,
+        `Cannot connect to the backend at ${API_BASE_URL}. Start the FastAPI service on port 8000 and retry.`
       );
     }
     throw error;
@@ -55,13 +92,16 @@ export const predictFood = async (fileOrBlob) => {
 };
 
 /**
- * Fetch past prediction history
+ * Fetch past prediction history for current authenticated user
  */
 export const getPredictionHistory = async () => {
   try {
     const response = await apiClient.get('/api/history');
-    return response.data.history;
+    return response.data?.history || [];
   } catch (error) {
+    if (error.response?.status === 401) {
+      throw error;
+    }
     const local = localStorage.getItem('nutrivision_history');
     if (local) {
       try {
@@ -82,7 +122,9 @@ export const savePrediction = async (prediction) => {
     const response = await apiClient.post('/api/history', prediction);
     return response.data;
   } catch (error) {
-    // Save to localStorage
+    if (error.response?.status === 401) {
+      throw error;
+    }
     const local = localStorage.getItem('nutrivision_history');
     let historyList = local ? JSON.parse(local) : [];
     historyList = [prediction, ...historyList];
@@ -96,18 +138,23 @@ export const savePrediction = async (prediction) => {
  */
 export const deletePrediction = async (id) => {
   try {
-    await apiClient.delete(`/api/history/${id}`);
+    const response = await apiClient.delete(`/api/history/${id}`);
+    return response.data;
   } catch (error) {
+    if (error.response?.status === 401) {
+      throw error;
+    }
     const local = localStorage.getItem('nutrivision_history');
     if (local) {
       const historyList = JSON.parse(local).filter((item) => item.id !== id);
       localStorage.setItem('nutrivision_history', JSON.stringify(historyList));
     }
+    return { status: 'deleted_locally', id };
   }
 };
 
 /**
- * Authentication API helpers with live backend + offline fallback
+ * Real Authentication API endpoints
  */
 export const loginUser = async (email, password) => {
   try {
@@ -119,28 +166,12 @@ export const loginUser = async (email, password) => {
       success: true,
       user: {
         ...response.data.user,
-        dailyCalorieGoal: response.data.user.dailyCalorieGoal || 2200,
-        dailyProteinGoal: response.data.user.dailyProteinGoal || 130,
+        dailyCalorieGoal: response.data.user.dailyCalorieGoal || 2000,
+        dailyProteinGoal: response.data.user.dailyProteinGoal || 120,
       },
       token: response.data.token,
     };
   } catch (error) {
-    // Fallback for offline demo mode
-    if (!error.response && email && password.length >= 4) {
-      const demoUser = {
-        id: 'usr_karan_01',
-        name: email.split('@')[0] || 'Karan',
-        email: email,
-        role: 'Premium Member',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-        dailyCalorieGoal: 2200,
-        dailyProteinGoal: 130,
-        dailyCarbGoal: 240,
-        dailyFatGoal: 65,
-        createdAt: '2026-01-15T10:00:00Z',
-      };
-      return { success: true, user: demoUser, token: 'jwt_mock_token_nutrivision' };
-    }
     const msg = error.response?.data?.detail || error.message || 'Login failed';
     throw new Error(msg);
   }
@@ -148,7 +179,7 @@ export const loginUser = async (email, password) => {
 
 export const registerUser = async (username, email, password) => {
   try {
-    const response = await apiClient.post('/api/auth/register', {
+    const response = await apiClient.post('/api/auth/signup', {
       email,
       password,
       name: username,
@@ -162,24 +193,14 @@ export const registerUser = async (username, email, password) => {
       token: response.data.token,
     };
   } catch (error) {
-    if (!error.response) {
-      const demoUser = {
-        id: `usr_${Math.random().toString(36).substr(2, 7)}`,
-        name: username || 'Nutrition Explorer',
-        email: email,
-        role: 'Member',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-        dailyCalorieGoal: 2000,
-        dailyProteinGoal: 120,
-        dailyCarbGoal: 220,
-        dailyFatGoal: 60,
-        createdAt: new Date().toISOString(),
-      };
-      return { success: true, user: demoUser, token: 'jwt_mock_token_nutrivision' };
-    }
     const msg = error.response?.data?.detail || error.message || 'Registration failed';
     throw new Error(msg);
   }
+};
+
+export const fetchCurrentUser = async () => {
+  const response = await apiClient.get('/api/auth/me');
+  return response.data;
 };
 
 export const updateUserProfileApi = async (updates) => {
@@ -187,9 +208,9 @@ export const updateUserProfileApi = async (updates) => {
     const response = await apiClient.patch('/api/auth/profile', updates);
     return response.data;
   } catch (error) {
-    return null;
+    const msg = error.response?.data?.detail || error.message || 'Profile update failed';
+    throw new Error(msg);
   }
 };
 
 export default apiClient;
-

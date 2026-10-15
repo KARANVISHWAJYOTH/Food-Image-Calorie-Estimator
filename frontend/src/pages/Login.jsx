@@ -10,6 +10,13 @@ export default function Login() {
   const { login, loginDemo, isLoading } = useAuth();
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('expired') === 'true') {
+      setError('Your session has expired. Please log in again.');
+    }
+  }, []);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -32,6 +39,8 @@ export default function Login() {
     const res = await loginDemo();
     if (res.success) {
       navigate('/dashboard');
+    } else {
+      setError(res.error || 'Failed to authenticate with demo account.');
     }
   };
 

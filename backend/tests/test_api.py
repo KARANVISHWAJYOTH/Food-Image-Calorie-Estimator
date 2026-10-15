@@ -8,6 +8,7 @@ import unittest
 # Configure temporary test database before importing app
 temp_dir = tempfile.mkdtemp()
 os.environ["DATA_DIR"] = temp_dir
+os.environ["SECRET_KEY"] = "test_jwt_secret_key_30min_test"
 
 # pyrefly: ignore [missing-import]
 from fastapi.testclient import TestClient
@@ -40,15 +41,15 @@ class TestNutriVisionAPI(unittest.TestCase):
         test_email = "test.user@example.com"
         test_password = "securePassword123"
 
-        # 1. Register new user
-        reg_payload = {
+        # 1. Register new user via /api/auth/signup
+        signup_payload = {
             "email": test_email,
             "password": test_password,
             "name": "Integration Tester",
             "dailyCalorieGoal": 2400,
             "dailyProteinGoal": 150,
         }
-        reg_res = client.post("/api/auth/register", json=reg_payload)
+        reg_res = client.post("/api/auth/signup", json=signup_payload)
         self.assertEqual(reg_res.status_code, 200)
         reg_data = reg_res.json()
         self.assertTrue(reg_data["success"])
@@ -57,8 +58,8 @@ class TestNutriVisionAPI(unittest.TestCase):
         self.assertIn("token", reg_data)
         token = reg_data["token"]
 
-        # 2. Reject duplicate registration
-        dup_res = client.post("/api/auth/register", json=reg_payload)
+        # 2. Reject duplicate registration via /api/auth/register alias
+        dup_res = client.post("/api/auth/register", json=signup_payload)
         self.assertEqual(dup_res.status_code, 400)
         self.assertIn("already exists", dup_res.json()["detail"])
 
@@ -89,7 +90,50 @@ class TestNutriVisionAPI(unittest.TestCase):
         self.assertEqual(patch_res.json()["name"], "Updated Tester")
         self.assertEqual(patch_res.json()["dailyCalorieGoal"], 2500)
 
+    def test_demo_account_seeded(self):
+        """Verify seeded demo user works with 1-click Demo credentials."""
+        res = client.post(
+            "/api/auth/login",
+            json={"email": "demo@nutrivision.ai", "password": "demoPassword123"},
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["user"]["email"], "demo@nutrivision.ai")
+        self.assertIn("token", data)
+
+    def test_unauthenticated_requests_rejected(self):
+        """Ensure /api/predict and /api/history reject unauthenticated requests with 401."""
+        # /api/predict
+        pred_res = client.post(
+            "/api/predict",
+            files={"image": ("test.jpg", b"image bytes", "image/jpeg")},
+        )
+        self.assertEqual(pred_res.status_code, 401)
+        self.assertIn("Authentication token is missing", pred_res.json()["detail"])
+
+        # /api/history GET
+        get_res = client.get("/api/history")
+        self.assertEqual(get_res.status_code, 401)
+
+        # /api/history POST
+        post_res = client.post("/api/history", json={"foodClass": "Pizza", "calories": 300})
+        self.assertEqual(post_res.status_code, 401)
+
+        # /api/history DELETE
+        del_res = client.delete("/api/history/item123")
+        self.assertEqual(del_res.status_code, 401)
+
     def test_history_crud_flow(self):
+        # Obtain auth token
+        login_res = client.post(
+            "/api/auth/login",
+            json={"email": "demo@nutrivision.ai", "password": "demoPassword123"},
+        )
+        self.assertEqual(login_res.status_code, 200)
+        token = login_res.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         item_payload = {
             "id": "hist_test_scan_01",
             "foodClass": "Grilled Chicken Rice Bowl",
@@ -105,12 +149,12 @@ class TestNutriVisionAPI(unittest.TestCase):
         }
 
         # 1. Save scan to history
-        post_res = client.post("/api/history", json=item_payload)
+        post_res = client.post("/api/history", json=item_payload, headers=headers)
         self.assertEqual(post_res.status_code, 200)
         self.assertEqual(post_res.json()["status"], "saved")
 
         # 2. Retrieve history list
-        get_res = client.get("/api/history?limit=10")
+        get_res = client.get("/api/history?limit=10", headers=headers)
         self.assertEqual(get_res.status_code, 200)
         history_data = get_res.json()
         self.assertGreaterEqual(history_data["total"], 1)
@@ -118,18 +162,28 @@ class TestNutriVisionAPI(unittest.TestCase):
         self.assertTrue(found)
 
         # 3. Delete scan from history
-        del_res = client.delete("/api/history/hist_test_scan_01")
+        del_res = client.delete("/api/history/hist_test_scan_01", headers=headers)
         self.assertEqual(del_res.status_code, 200)
         self.assertEqual(del_res.json()["status"], "deleted")
 
         # 4. Verify removal
-        get_after = client.get("/api/history?limit=10")
+        get_after = client.get("/api/history?limit=10", headers=headers)
         self.assertFalse(any(item["id"] == "hist_test_scan_01" for item in get_after.json()["history"]))
 
-    def test_predict_endpoint_validation(self):
+    def test_predict_endpoint_validation_authenticated(self):
+        # Obtain auth token
+        login_res = client.post(
+            "/api/auth/login",
+            json={"email": "demo@nutrivision.ai", "password": "demoPassword123"},
+        )
+        self.assertEqual(login_res.status_code, 200)
+        token = login_res.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
         # 1. When model weights are not loaded, verify 503 Service Unavailable response
         response = client.post(
             "/api/predict",
+            headers=headers,
             files={"image": ("test.jpg", b"image bytes", "image/jpeg")},
         )
         self.assertEqual(response.status_code, 503)
@@ -142,6 +196,7 @@ class TestNutriVisionAPI(unittest.TestCase):
             predictor_instance.is_torch_ready = True
             bad_format_res = client.post(
                 "/api/predict",
+                headers=headers,
                 files={"image": ("test.txt", b"not an image", "text/plain")},
             )
             self.assertEqual(bad_format_res.status_code, 400)
@@ -152,4 +207,3 @@ class TestNutriVisionAPI(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

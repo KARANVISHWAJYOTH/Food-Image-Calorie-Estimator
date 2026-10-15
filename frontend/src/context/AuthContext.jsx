@@ -1,40 +1,82 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   loginUser as apiLogin,
   registerUser as apiRegister,
+  fetchCurrentUser,
   updateUserProfileApi,
 } from '../services/api';
+import Toast from '../components/Toast';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
+    const token = localStorage.getItem('nutrivision_token');
     const saved = localStorage.getItem('nutrivision_user');
-    if (saved) {
+    if (token && saved) {
       try {
         return JSON.parse(saved);
       } catch (e) {
         return null;
       }
     }
-    // Default logged-in user for seamless first impression
-    return {
-      id: 'usr_karan_01',
-      name: 'Karan',
-      email: 'karan@nutrivision.ai',
-      role: 'Pro Member',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-      dailyCalorieGoal: 2200,
-      dailyProteinGoal: 130,
-      dailyCarbGoal: 240,
-      dailyFatGoal: 65,
-      dietaryPreference: 'Balanced & High-Protein',
-      createdAt: '2026-01-15T10:00:00Z',
-    };
+    return null;
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [toastMsg, setToastMsg] = useState(null);
 
+  const logout = useCallback(() => {
+    setUser(null);
+    localStorage.removeItem('nutrivision_user');
+    localStorage.removeItem('nutrivision_token');
+  }, []);
+
+  // Check backend session validity on initial app mount if token exists
+  useEffect(() => {
+    const token = localStorage.getItem('nutrivision_token');
+    if (!token) return;
+
+    let isMounted = true;
+    fetchCurrentUser()
+      .then((freshUser) => {
+        if (isMounted && freshUser) {
+          setUser(freshUser);
+          localStorage.setItem('nutrivision_user', JSON.stringify(freshUser));
+        }
+      })
+      .catch((err) => {
+        if (err.response?.status === 401) {
+          logout();
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [logout]);
+
+  // Listen for session expiration events (from Axios 401 interceptor)
+  useEffect(() => {
+    // Check if session expired banner was queued in sessionStorage
+    const storedMsg = sessionStorage.getItem('nutrivision_session_expired');
+    if (storedMsg) {
+      setToastMsg(storedMsg);
+      sessionStorage.removeItem('nutrivision_session_expired');
+    }
+
+    const handleSessionExpired = (e) => {
+      logout();
+      setToastMsg(e.detail?.message || 'Your session has expired. Please log in again.');
+    };
+
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => {
+      window.removeEventListener('auth:session-expired', handleSessionExpired);
+    };
+  }, [logout]);
+
+  // Sync user state changes to localStorage
   useEffect(() => {
     if (user) {
       localStorage.setItem('nutrivision_user', JSON.stringify(user));
@@ -56,25 +98,21 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /**
+   * 1-Click Demo Login: Authenticates against seeded demo user in SQLite DB,
+   * acquiring a real 30-minute signed JWT access token.
+   */
   const loginDemo = async () => {
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    const demoUser = {
-      id: 'usr_demo_karan',
-      name: 'Karan',
-      email: 'karan.demo@nutrivision.ai',
-      role: 'Pro Member',
-      avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&q=80',
-      dailyCalorieGoal: 2200,
-      dailyProteinGoal: 130,
-      dailyCarbGoal: 240,
-      dailyFatGoal: 65,
-      dietaryPreference: 'High-Protein Athletic',
-      createdAt: '2026-02-01T08:00:00Z',
-    };
-    setUser(demoUser);
-    setIsLoading(false);
-    return { success: true };
+    try {
+      const res = await apiLogin('demo@nutrivision.ai', 'demoPassword123');
+      setUser(res.user);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message || 'Demo login failed' };
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const register = async (username, email, password) => {
@@ -91,19 +129,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateProfile = async (updatedFields) => {
-    setUser((prev) => ({
-      ...prev,
-      ...updatedFields,
-    }));
-    await updateUserProfileApi(updatedFields);
+    try {
+      const updated = await updateUserProfileApi(updatedFields);
+      if (updated) {
+        setUser((prev) => ({
+          ...prev,
+          ...updated,
+        }));
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err.message || 'Failed to update profile' };
+    }
   };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('nutrivision_user');
-    localStorage.removeItem('nutrivision_token');
-  };
-
 
   return (
     <AuthContext.Provider
@@ -116,9 +154,16 @@ export const AuthProvider = ({ children }) => {
         register,
         updateProfile,
         logout,
+        setToastMsg,
       }}
     >
       {children}
+      <Toast
+        message={toastMsg}
+        type="error"
+        onClose={() => setToastMsg(null)}
+        duration={4500}
+      />
     </AuthContext.Provider>
   );
 };

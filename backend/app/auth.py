@@ -1,142 +1,186 @@
 """Authentication and JWT module for NutriVision AI.
 
-Uses PBKDF2-HMAC-SHA256 for secure password hashing and RFC-compliant
-HMAC-SHA256 JWT tokens with zero external binary C-dependencies.
+Uses bcrypt (passlib) for password hashing and python-jose for issuing
+signed 30-minute JWT access tokens. Provides get_current_user FastAPI dependency.
 """
 
-import base64
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
-import json
 import os
-import secrets
 from typing import Any, Optional
 
-from fastapi import Depends, HTTPException, Header, status
+from fastapi import Depends, Header, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
 
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "nutrivision_super_secret_jwt_key_2026_change_in_prod")
+from .database import get_user_by_id
+
+# Load SECRET_KEY from environment with secure fallback
+SECRET_KEY = os.getenv("SECRET_KEY", os.getenv("JWT_SECRET_KEY", "nutrivision_super_secret_jwt_key_2026_change_in_prod"))
 JWT_ALGORITHM = "HS256"
-DEFAULT_TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30-minute token lifespan
+
+# Passlib CryptContext with bcrypt scheme
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security_bearer = HTTPBearer(auto_error=False)
 
 
-# --- Password Hashing with PBKDF2 ---
+# --- Password Hashing with Bcrypt ---
 
 def hash_password(password: str, salt: Optional[str] = None) -> tuple[str, str]:
-    """Hash a password using PBKDF2-HMAC-SHA256 with 100,000 rounds."""
-    if not salt:
-        salt = secrets.token_hex(16)
-    hashed_bytes = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        salt.encode("utf-8"),
-        100000,
-    )
-    return hashed_bytes.hex(), salt
+    """Hash password using bcrypt via passlib.
+
+    Returns:
+        tuple (hash_str, salt_str). Bcrypt embeds salt into the hash string.
+    """
+    hashed = pwd_context.hash(password)
+    return hashed, ""
 
 
-def verify_password(plain_password: str, stored_hash: str, salt: str) -> bool:
-    """Verify password against stored PBKDF2 hash."""
-    computed_hash, _ = hash_password(plain_password, salt=salt)
-    return hmac.compare_digest(computed_hash, stored_hash)
+def verify_password(plain_password: str, stored_hash: str, salt: Optional[str] = None) -> bool:
+    """Verify password against bcrypt hash, with fallback for legacy PBKDF2 hashes."""
+    if not stored_hash or not plain_password:
+        return False
+
+    # Check if bcrypt hash format ($2a$, $2b$, $2y$)
+    if stored_hash.startswith(("$2a$", "$2b$", "$2y$")):
+        try:
+            return pwd_context.verify(plain_password, stored_hash)
+        except Exception:
+            return False
+
+    # Legacy PBKDF2 fallback
+    if salt:
+        try:
+            computed_bytes = hashlib.pbkdf2_hmac(
+                "sha256",
+                plain_password.encode("utf-8"),
+                salt.encode("utf-8"),
+                100000,
+            )
+            return hmac.compare_digest(computed_bytes.hex(), stored_hash)
+        except Exception:
+            pass
+
+    return False
 
 
-# --- Secure RFC 7519 JWT Implementation ---
-
-def _b64url_encode(data: bytes) -> str:
-    """Encode bytes to base64url string without padding."""
-    return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
-
-
-def _b64url_decode(s: str) -> bytes:
-    """Decode base64url string with padding restoration."""
-    rem = len(s) % 4
-    if rem > 0:
-        s += "=" * (4 - rem)
-    return base64.urlsafe_b64decode(s.encode("utf-8"))
-
+# --- JWT Token Generation & Verification with python-jose ---
 
 def create_access_token(
     user_id: str,
     email: str,
     role: str = "Member",
-    expires_delta_seconds: int = DEFAULT_TOKEN_EXPIRY_SECONDS,
+    expires_delta_minutes: int = ACCESS_TOKEN_EXPIRE_MINUTES,
 ) -> str:
-    """Generate a signed HMAC-SHA256 JWT string."""
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-    header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
+    """Issue a signed JWT access token with 30-minute expiration."""
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=expires_delta_minutes)
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "email": email,
         "role": role,
-        "iat": now_ts,
-        "exp": now_ts + expires_delta_seconds,
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
     }
-
-    header_bytes = json.dumps(header, separators=(",", ":")).encode("utf-8")
-    payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-
-    unsigned_token = f"{_b64url_encode(header_bytes)}.{_b64url_encode(payload_bytes)}"
-    signature = hmac.new(
-        JWT_SECRET_KEY.encode("utf-8"),
-        unsigned_token.encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-
-    return f"{unsigned_token}.{_b64url_encode(signature)}"
+    return jwt.encode(payload, SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 
 def decode_access_token(token: str) -> Optional[dict[str, Any]]:
-    """Decode and verify a signed JWT token string."""
+    """Decode and validate a signed JWT token string."""
     try:
-        parts = token.strip().split(".")
-        if len(parts) != 3:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        # Verify expiration
+        exp = payload.get("exp")
+        if exp and exp < datetime.now(timezone.utc).timestamp():
             return None
-        header_b64, payload_b64, signature_b64 = parts
-
-        unsigned_token = f"{header_b64}.{payload_b64}"
-        expected_sig = hmac.new(
-            JWT_SECRET_KEY.encode("utf-8"),
-            unsigned_token.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-
-        provided_sig = _b64url_decode(signature_b64)
-        if not hmac.compare_digest(expected_sig, provided_sig):
-            return None
-
-        payload_bytes = _b64url_decode(payload_b64)
-        payload = json.loads(payload_bytes.decode("utf-8"))
-
-        now_ts = int(datetime.now(timezone.utc).timestamp())
-        if payload.get("exp") and payload["exp"] < now_ts:
-            return None  # Token expired
-
         return payload
+    except JWTError:
+        return None
     except Exception:
         return None
 
 
 # --- FastAPI Auth Dependencies ---
 
-def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[dict[str, Any]]:
-    """Extract user claims if valid Bearer token is provided."""
-    if not authorization:
-        return None
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-    token = parts[1]
-    return decode_access_token(token)
+def extract_token_from_request(
+    credentials: Optional[HTTPAuthorizationCredentials],
+    authorization: Optional[str],
+) -> Optional[str]:
+    """Helper to extract raw token from HTTPBearer or Authorization header."""
+    if credentials and credentials.credentials:
+        return credentials.credentials.strip()
+    if authorization and authorization.strip().lower().startswith("bearer "):
+        parts = authorization.strip().split(" ", 1)
+        if len(parts) == 2:
+            return parts[1].strip()
+    return None
 
 
-def get_current_user_required(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
-    """Require a valid Bearer token or raise 401 Unauthorized."""
-    user = get_current_user_optional(authorization)
-    if not user:
+def get_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    authorization: Optional[str] = Header(None),
+) -> dict[str, Any]:
+    """Dependency that requires a valid Bearer token and returns the database user record."""
+    token = extract_token_from_request(credentials, authorization)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication token is missing, expired, or invalid.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token is expired or invalid.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token claims.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account no longer exists.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user["sub"] = user["id"]
+    return user
+
+
+# Aliases for backwards compatibility
+get_current_user_required = get_current_user
+
+
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
+    authorization: Optional[str] = Header(None),
+) -> Optional[dict[str, Any]]:
+    """Dependency that extracts user if valid token is provided, without raising 401."""
+    token = extract_token_from_request(credentials, authorization)
+    if not token:
+        return None
+    payload = decode_access_token(token)
+    if not payload:
+        return None
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    user = get_user_by_id(user_id)
+    if user:
+        user["sub"] = user["id"]
     return user

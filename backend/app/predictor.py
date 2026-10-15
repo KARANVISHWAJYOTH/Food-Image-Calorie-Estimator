@@ -66,15 +66,16 @@ def derive_dietary_fiber(food_name: str, carbohydrates: float) -> float:
 
 
 class FoodPredictor:
-    def __init__(self, weights_path: Optional[str] = None) -> None:
+    def __init__(self, weights_path: Optional[str] = None, variant: Optional[str] = None) -> None:
         self.device = "cpu"
+        self.model_variant = (variant or os.getenv("MODEL_VARIANT", "fp32")).lower().strip()
         self.classes: list[str] = list(DEFAULT_CLASS_MAP.values())
         self.class_map: dict[int, str] = dict(DEFAULT_CLASS_MAP)
         self.target_stats: Optional[Dict[str, Any]] = None
         self.config: Dict[str, Any] = {}
         self.val_metrics: Dict[str, Any] = {}
         self.is_torch_ready = False
-        self._init_model(weights_path or os.getenv("MODEL_WEIGHTS_PATH"))
+        self._init_model(weights_path)
 
     def load_weights(self, weights_path: str) -> None:
         """Load or reload model weights, class names, target stats, config, and val metrics from checkpoint."""
@@ -102,20 +103,59 @@ class FoodPredictor:
 
         return torch.clamp(denorm, min=0.0)
 
+    def _resolve_candidate_path(self, explicit_path: Optional[str]) -> Optional[str]:
+        if explicit_path and os.path.exists(explicit_path):
+            return explicit_path
+
+        env_path = os.getenv("MODEL_WEIGHTS_PATH")
+        if env_path and os.path.exists(env_path):
+            return env_path
+
+        current_dir = Path(__file__).resolve().parent
+        repo_root = current_dir.parents[1]
+
+        if self.model_variant == "int8":
+            candidates = [
+                current_dir / "best_model_int8.pth",
+                repo_root / "ml" / "optimization" / "best_model_int8.pth",
+                repo_root / "ml" / "training" / "checkpoints" / "best_model_int8.pth",
+                Path("best_model_int8.pth"),
+            ]
+        else:
+            candidates = [
+                current_dir / "best_model.pth",
+                repo_root / "ml" / "training" / "checkpoints" / "best_model.pth",
+                repo_root / "best_model.pth",
+                Path("best_model.pth"),
+            ]
+
+        for cand in candidates:
+            if cand.is_file():
+                return str(cand)
+        return None
+
     def _init_model(self, weights_path: Optional[str]) -> None:
         try:
             import torch
+            from torch import nn
             from torchvision import transforms
             from .model import MultiTaskFoodCNN, TORCH_AVAILABLE
 
-            if not TORCH_AVAILABLE or not weights_path or not os.path.exists(weights_path):
-                logger.warning("Trained model weights are not configured; prediction is disabled.")
+            resolved_path = self._resolve_candidate_path(weights_path)
+
+            if not TORCH_AVAILABLE or not resolved_path:
+                logger.warning(f"Trained model weights not found for variant '{self.model_variant}'; prediction is disabled.")
                 return
 
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            is_int8 = self.model_variant == "int8" or "int8" in resolved_path.lower()
+            if is_int8:
+                self.model_variant = "int8"
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-            # Load checkpoint mapping
-            checkpoint = torch.load(weights_path, map_location=self.device, weights_only=False)
+            logger.info(f"Loading {self.model_variant.upper()} weights from: {resolved_path}")
+            checkpoint = torch.load(resolved_path, map_location=self.device, weights_only=False)
             metadata = checkpoint.get("metadata", {}) if isinstance(checkpoint.get("metadata"), dict) else {}
 
             # 1. State dict
@@ -165,15 +205,22 @@ class FoodPredictor:
             if isinstance(self.config, dict) and "model" in self.config:
                 backbone = self.config["model"].get("backbone", "resnet50")
 
-            # Initialize unified model with matching class count
-            self.model = MultiTaskFoodCNN(
-                num_classes=len(self.classes),
-                backbone=backbone,
-                pretrained=False,
-            )
-            self.model.load_state_dict(state_dict)
+            # Initialize model
+            if isinstance(checkpoint, dict) and "model" in checkpoint and isinstance(checkpoint["model"], nn.Module):
+                self.model = checkpoint["model"]
+            else:
+                self.model = MultiTaskFoodCNN(
+                    num_classes=len(self.classes),
+                    backbone=backbone,
+                    pretrained=False,
+                )
+                if is_int8:
+                    self.model = torch.quantization.quantize_dynamic(self.model, {nn.Linear}, dtype=torch.qint8)
+                self.model.load_state_dict(state_dict)
+
             self.model.to(self.device)
             self.model.eval()
+            self.is_torch_ready = True
 
             self.transform = transforms.Compose([
                 transforms.Resize(256),
@@ -185,7 +232,7 @@ class FoodPredictor:
                 ),
             ])
             self.is_torch_ready = True
-            logger.info(f"PyTorch Multi-Task CNN initialized on device: {self.device}")
+            logger.info(f"FoodPredictor successfully initialized ({self.model_variant.upper()} on {self.device}).")
         except Exception as e:
             logger.warning(f"Failed to load PyTorch backend pipeline: {e}. Fallback enabled.")
             self.is_torch_ready = False

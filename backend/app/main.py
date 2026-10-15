@@ -30,6 +30,7 @@ from .auth import (
     hash_password,
     verify_password,
     create_access_token,
+    get_current_user,
     get_current_user_optional,
     get_current_user_required,
 )
@@ -79,14 +80,19 @@ def health_check():
         status="healthy",
         modelLoaded=predictor_instance.is_torch_ready,
         modelArchitecture="MultiTaskFoodCNN (ResNet50 Backbone + Calorie/Macro Regression)",
+        modelVariant=getattr(predictor_instance, "model_variant", "fp32"),
         device=str(predictor_instance.device),
         version="1.0.0"
     )
 
 @app.post("/api/predict", response_model=PredictionResponse, tags=["Prediction"])
-async def predict_food(image: UploadFile = File(...)):
+async def predict_food(
+    image: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
     """
     Accepts an uploaded food photo via multipart/form-data.
+    Requires authentication via Bearer JWT.
     Returns classified food item, confidence score, and multi-task estimated nutritional breakdown.
     """
     if not predictor_instance.is_torch_ready:
@@ -108,7 +114,7 @@ async def predict_food(image: UploadFile = File(...)):
 
     try:
         contents = await image.read()
-        if len(contents) > 15 * 1024 * 1024: # 15 MB limit
+        if len(contents) > 15 * 1024 * 1024:  # 15 MB limit
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail="Image file size exceeds 15 MB limit."
@@ -127,9 +133,10 @@ async def predict_food(image: UploadFile = File(...)):
 
 # --- Authentication Endpoints ---
 
+@app.post("/api/auth/signup", response_model=AuthResponse, tags=["Authentication"])
 @app.post("/api/auth/register", response_model=AuthResponse, tags=["Authentication"])
 def register_user(request: UserRegisterRequest):
-    """Register a new user account with PBKDF2 hashed credentials."""
+    """Register a new user account with bcrypt hashed credentials."""
     existing = get_user_by_email(request.email)
     if existing:
         raise HTTPException(
@@ -191,30 +198,27 @@ def login_user(request: UserLoginRequest):
 
 
 @app.get("/api/auth/me", response_model=UserResponse, tags=["Authentication"])
-def get_current_profile(current_user: dict = Depends(get_current_user_required)):
+def get_current_profile(current_user: dict = Depends(get_current_user)):
     """Fetch current logged-in user profile from database."""
-    user = get_user_by_id(current_user["sub"])
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
     return UserResponse(
-        id=user["id"],
-        email=user["email"],
-        name=user["name"],
-        role=user["role"],
-        dailyCalorieGoal=user["daily_calorie_goal"],
-        dailyProteinGoal=user["daily_protein_goal"],
-        createdAt=user["created_at"],
+        id=current_user["id"],
+        email=current_user["email"],
+        name=current_user["name"],
+        role=current_user.get("role", "Member"),
+        dailyCalorieGoal=current_user.get("daily_calorie_goal", 2000),
+        dailyProteinGoal=current_user.get("daily_protein_goal", 120),
+        createdAt=current_user.get("created_at", ""),
     )
 
 
 @app.patch("/api/auth/profile", response_model=UserResponse, tags=["Authentication"])
 def update_profile(
     updates: UserProfileUpdateRequest,
-    current_user: dict = Depends(get_current_user_required),
+    current_user: dict = Depends(get_current_user),
 ):
     """Update profile settings and daily nutrition targets."""
     updated = update_user_profile(
-        user_id=current_user["sub"],
+        user_id=current_user["id"],
         name=updates.name,
         daily_calorie_goal=updates.dailyCalorieGoal,
         daily_protein_goal=updates.dailyProteinGoal,
@@ -232,16 +236,15 @@ def update_profile(
     )
 
 
-# --- Persistent History Endpoints ---
+# --- Persistent History Endpoints (Protected) ---
 
 @app.get("/api/history", tags=["History"])
 def get_prediction_history(
     limit: int = Query(50, ge=1, le=100),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
+    current_user: dict = Depends(get_current_user),
 ):
-    """Returns past food estimation scans from SQLite database."""
-    user_id = current_user["sub"] if current_user else None
-    history_items = get_all_history(limit=limit, user_id=user_id)
+    """Returns past food estimation scans for current authenticated user from SQLite database."""
+    history_items = get_all_history(limit=limit, user_id=current_user["id"])
     return {
         "total": len(history_items),
         "history": history_items,
@@ -251,17 +254,19 @@ def get_prediction_history(
 @app.post("/api/history", tags=["History"])
 def save_to_history(
     item: HistoryItem,
-    current_user: Optional[dict] = Depends(get_current_user_optional),
+    current_user: dict = Depends(get_current_user),
 ):
-    """Save an analysis to SQLite history database."""
-    user_id = current_user["sub"] if current_user else None
-    saved = insert_history_item(item.model_dump(), user_id=user_id)
+    """Save an analysis to SQLite history database for authenticated user."""
+    saved = insert_history_item(item.model_dump(), user_id=current_user["id"])
     return {"status": "saved", "item": saved}
 
 
 @app.delete("/api/history/{item_id}", tags=["History"])
-def delete_history_item(item_id: str):
-    """Remove an item from SQLite history."""
-    deleted = db_delete_history(item_id)
+def delete_history_item(
+    item_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Remove an item from SQLite history belonging to authenticated user."""
+    deleted = db_delete_history(item_id, user_id=current_user["id"])
     return {"status": "deleted" if deleted else "not_found", "id": item_id}
 

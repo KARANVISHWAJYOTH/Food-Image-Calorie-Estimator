@@ -85,6 +85,39 @@ def init_db() -> None:
         CREATE INDEX IF NOT EXISTS idx_history_created_at ON history(created_at DESC);
         """)
 
+        # Seed 1-click Demo Accounts if not already present
+        _seed_demo_accounts(conn)
+
+
+def _seed_demo_accounts(conn: sqlite3.Connection) -> None:
+    """Seed demo accounts with bcrypt password hashes for 1-click login."""
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        hashed_pw = pwd_context.hash("demoPassword123")
+        now = datetime.now(timezone.utc).isoformat()
+
+        demo_users = [
+            ("usr_demo_karan", "karan.demo@nutrivision.ai", "Karan Vishwajyoth", 2200, 130),
+            ("usr_demo_default", "demo@nutrivision.ai", "Demo Explorer", 2000, 120),
+        ]
+
+        for u_id, email, name, cal_goal, prot_goal in demo_users:
+            cur = conn.execute("SELECT id FROM users WHERE email = ?", (email,))
+            if not cur.fetchone():
+                conn.execute(
+                    """
+                    INSERT INTO users (
+                        id, email, name, password_hash, password_salt, role,
+                        daily_calorie_goal, daily_protein_goal, daily_carb_goal, daily_fat_goal, created_at
+                    ) VALUES (?, ?, ?, ?, ?, 'Pro Member', ?, ?, 240, 65, ?)
+                    """,
+                    (u_id, email, name, hashed_pw, "", cal_goal, prot_goal, now),
+                )
+    except Exception as e:
+        # Avoid crashing startup if seeding encounters error
+        pass
+
 
 # --- User Repository Functions ---
 
@@ -241,10 +274,16 @@ def get_all_history(limit: int = 50, user_id: Optional[str] = None) -> list[dict
         return [_format_history_row(dict(r)) for r in rows]
 
 
-def delete_history_item(hist_id: str) -> bool:
-    """Delete a history item by ID."""
+def delete_history_item(hist_id: str, user_id: Optional[str] = None) -> bool:
+    """Delete a history item by ID (optionally scoped to a user)."""
     with get_db() as conn:
-        cursor = conn.execute("DELETE FROM history WHERE id = ?", (hist_id,))
+        if user_id:
+            cursor = conn.execute(
+                "DELETE FROM history WHERE id = ? AND (user_id = ? OR user_id IS NULL)",
+                (hist_id, user_id),
+            )
+        else:
+            cursor = conn.execute("DELETE FROM history WHERE id = ?", (hist_id,))
         return cursor.rowcount > 0
 
 

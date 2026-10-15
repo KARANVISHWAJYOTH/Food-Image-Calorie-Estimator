@@ -59,6 +59,7 @@ class HealthResponse(BaseModel):
     status: str = "healthy"
     modelLoaded: bool = True
     modelArchitecture: str = "MultiTaskFoodCNN (ResNet50 Backbone + Dual Heads)"
+    modelVariant: Optional[str] = "fp32"
     device: str = "cpu"
     version: str = "1.0.0"
 
