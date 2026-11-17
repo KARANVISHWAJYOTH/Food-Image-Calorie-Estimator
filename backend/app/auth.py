@@ -1,7 +1,8 @@
 """Authentication and JWT module for NutriVision AI.
 
 Uses bcrypt (passlib) for password hashing and python-jose for issuing
-signed 30-minute JWT access tokens. Provides get_current_user FastAPI dependency.
+signed JWT access tokens whose lifetime is set by ACCESS_TOKEN_EXPIRE_MINUTES.
+Provides the get_current_user FastAPI dependency.
 """
 
 from __future__ import annotations
@@ -19,10 +20,16 @@ from passlib.context import CryptContext
 
 from .database import get_user_by_id
 
-# Load SECRET_KEY from environment with secure fallback
-SECRET_KEY = os.getenv("SECRET_KEY", os.getenv("JWT_SECRET_KEY", "nutrivision_super_secret_jwt_key_2026_change_in_prod"))
+# Load SECRET_KEY from the environment. Production must supply one explicitly.
+_ENVIRONMENT = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")).strip().lower()
+SECRET_KEY = os.getenv("SECRET_KEY") or os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    if _ENVIRONMENT in {"production", "prod"}:
+        raise RuntimeError("SECRET_KEY (or JWT_SECRET_KEY) must be set when APP_ENV=production.")
+    SECRET_KEY = "nutrivision_dev_only_secret_change_me"
+
 JWT_ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30-minute token lifespan
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 # Passlib CryptContext with bcrypt scheme
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -161,26 +168,3 @@ def get_current_user(
     user["sub"] = user["id"]
     return user
 
-
-# Aliases for backwards compatibility
-get_current_user_required = get_current_user
-
-
-def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security_bearer),
-    authorization: Optional[str] = Header(None),
-) -> Optional[dict[str, Any]]:
-    """Dependency that extracts user if valid token is provided, without raising 401."""
-    token = extract_token_from_request(credentials, authorization)
-    if not token:
-        return None
-    payload = decode_access_token(token)
-    if not payload:
-        return None
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-    user = get_user_by_id(user_id)
-    if user:
-        user["sub"] = user["id"]
-    return user
