@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+env/
+venv/
+
+# Testing & Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node / Frontend Build
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# SQLite Databases & Uploaded Media
+backend/data/
+!backend/data/.gitkeep
+
+# ML datasets and generated artifacts
+ml/data/food101/
+ml/data/nutrition5k_raw/
+ml/data/nutrition5k_clean.csv
+ml/data/combined_labels.csv
+ml/data/unmatched_classes.csv
+ml/data/splits.json
+ml/training/checkpoints/
+ml/training/logs/
+backend_server.log
+vite_dev.log

@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900" width="1400" height="900" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrowLight" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <rect width="1400" height="900" fill="#ffffff"/>
+  <text x="40" y="52" font-size="28" font-weight="700" fill="#0f172a">NutriVision AI — System Architecture</text>
+  <text x="40" y="82" font-size="15" fill="#475569">Food image → food class + calories/protein/carbohydrates/fat, served as a full-stack web app</text>
+
+  <!-- ============ Column 1: Client ============ -->
+  <text x="40" y="126" font-size="12" font-weight="700" letter-spacing="1.5" fill="#1d4ed8">CLIENT</text>
+  <text x="40" y="146" font-size="16" font-weight="600" fill="#0f172a">React 19 SPA</text>
+  <text x="40" y="166" font-size="12" fill="#64748b">Vite · Tailwind CSS · React Router · Recharts</text>
+
+  <g fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.3">
+    <rect x="40" y="186" width="330" height="56" rx="10"/>
+    <rect x="40" y="260" width="330" height="56" rx="10"/>
+    <rect x="40" y="334" width="330" height="56" rx="10"/>
+    <rect x="40" y="408" width="330" height="56" rx="10"/>
+    <rect x="40" y="482" width="330" height="56" rx="10"/>
+    <rect x="40" y="556" width="330" height="56" rx="10"/>
+  </g>
+  <g font-size="14" fill="#0f172a">
+    <text x="58" y="210">Login / Sign-up</text>
+    <text x="58" y="284">Upload food photo</text>
+    <text x="58" y="358">Result page + portion scaler</text>
+    <text x="58" y="432">Nutrition dashboard (goals, charts)</text>
+    <text x="58" y="506">History &amp; profile</text>
+    <text x="58" y="580">Axios API client</text>
+  </g>
+  <g font-size="12" fill="#64748b">
+    <text x="58" y="228">JWT stored in localStorage</text>
+    <text x="58" y="302">JPEG / PNG / WEBP, ≤ 15 MB</text>
+    <text x="58" y="376">Calories, macros, confidence</text>
+    <text x="58" y="450">Daily calorie / protein goals</text>
+    <text x="58" y="524">Server-backed, user-isolated</text>
+    <text x="58" y="598">Auth header on every request</text>
+  </g>
+
+  <!-- step 1 arrow: client -> backend -->
+  <path d="M370 470 C 410 470, 420 330, 455 330" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <circle cx="378" cy="470" r="11" fill="#1d4ed8"/>
+  <text x="378" y="475" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+
+  <!-- nginx in prod -->
+  <rect x="40" y="640" width="330" height="46" rx="10" fill="#eef2ff" stroke="#c7d2fe" stroke-width="1.3"/>
+  <text x="58" y="660" font-size="13" font-weight="600" fill="#3730a3">nginx (Docker)</text>
+  <text x="58" y="677" font-size="11" fill="#4f46e5">SPA fallback + reverse proxy for /api, /uploads</text>
+
+  <!-- ============ Column 2: Backend ============ -->
+  <text x="500" y="126" font-size="12" font-weight="700" letter-spacing="1.5" fill="#047857">BACKEND</text>
+  <text x="500" y="146" font-size="16" font-weight="600" fill="#0f172a">FastAPI (async)</text>
+  <text x="500" y="166" font-size="12" fill="#64748b">Pydantic 2 · SQLAlchemy 2 · JWT (python-jose)</text>
+
+  <g fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.3">
+    <rect x="500" y="186" width="350" height="56" rx="10"/>
+    <rect x="500" y="260" width="350" height="56" rx="10"/>
+    <rect x="500" y="334" width="350" height="56" rx="10"/>
+    <rect x="500" y="408" width="350" height="96" rx="10" fill="#f0fdf4" stroke="#86efac"/>
+    <rect x="500" y="522" width="350" height="56" rx="10"/>
+    <rect x="500" y="596" width="350" height="56" rx="10"/>
+  </g>
+  <g font-size="14" fill="#0f172a">
+    <text x="518" y="210">/api/auth — register, login, me</text>
+    <text x="518" y="284">/api/predict — multipart image</text>
+    <text x="518" y="358">Upload validation + orphan cleanup</text>
+    <text x="518" y="432" font-weight="600">Predictor service</text>
+    <text x="518" y="546">/api/history · /api/health</text>
+    <text x="518" y="620">SQLite / PostgreSQL</text>
+  </g>
+  <g font-size="12" fill="#64748b">
+    <text x="518" y="228">bcrypt password hashing, Bearer tokens</text>
+    <text x="518" y="302">Decode check, format, size &amp; dimension limits</text>
+    <text x="518" y="376">503 if checkpoint missing / invalid</text>
+    <text x="518" y="452">1. Image decode → RGB</text>
+    <text x="518" y="470">2. Transform + batch the tensor</text>
+    <text x="518" y="488">3. Model inference (no-grad)</text>
+    <text x="518" y="564">Per-user rows, goals, upload paths</text>
+    <text x="518" y="638">SQLAlchemy models · Alembic migrations</text>
+  </g>
+
+  <!-- step 2 arrow: predictor -> transform -->
+  <path d="M850 456 L 900 456" fill="none" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <circle cx="876" cy="456" r="11" fill="#047857"/>
+  <text x="876" y="461" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+
+  <!-- uploads volume -->
+  <rect x="500" y="676" width="350" height="46" rx="10" fill="#fffbeb" stroke="#fde68a" stroke-width="1.3"/>
+  <text x="518" y="696" font-size="13" font-weight="600" fill="#92400e">Uploads volume</text>
+  <text x="518" y="713" font-size="11" fill="#a16207">Saved images served from /uploads (Docker volume)</text>
+
+  <!-- ============ Column 3: Model ============ -->
+  <text x="1000" y="126" font-size="12" font-weight="700" letter-spacing="1.5" fill="#7c2d12">MODEL INFERENCE</text>
+  <text x="1000" y="146" font-size="16" font-weight="600" fill="#0f172a">Multi-task ResNet-50</text>
+  <text x="1000" y="166" font-size="12" fill="#64748b">PyTorch · torchvision · one shared backbone</text>
+
+  <g fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.3">
+    <rect x="1000" y="186" width="360" height="56" rx="10"/>
+    <rect x="1000" y="260" width="360" height="56" rx="10"/>
+    <rect x="1000" y="334" width="360" height="56" rx="10"/>
+    <rect x="1000" y="408" width="360" height="56" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+    <rect x="1000" y="482" width="360" height="56" rx="10" fill="#eff6ff" stroke="#bfdbfe"/>
+    <rect x="1000" y="556" width="360" height="56" rx="10"/>
+    <rect x="1000" y="630" width="360" height="56" rx="10"/>
+  </g>
+  <g font-size="14" fill="#0f172a">
+    <text x="1018" y="210">Transforms — resize 256 → crop 224</text>
+    <text x="1018" y="284">ResNet-50 backbone (ImageNet init)</text>
+    <text x="1018" y="358">Shared bottleneck 512 + dropout 0.3</text>
+    <text x="1018" y="432">Classifier head — 101 Food-101 classes</text>
+    <text x="1018" y="506">Regression head — calories, protein, carbs, fat</text>
+    <text x="1018" y="580">De-normalize (train mean/std) + clamp ≥ 0</text>
+    <text x="1018" y="654">Confidence score + low-confidence flag</text>
+  </g>
+  <g font-size="12" fill="#64748b">
+    <text x="1018" y="228">ImageNet mean/std normalization</text>
+    <text x="1018" y="302">Frozen in stage 1, layer4 unfrozen in stage 2</text>
+    <text x="1018" y="376">BatchNorm + ReLU, feeds both heads</text>
+    <text x="1018" y="450">softmax → top-1 class + probability</text>
+    <text x="1018" y="524">z-scored targets, 4 floats per image</text>
+    <text x="1018" y="598">Negative outputs are impossible in the API</text>
+    <text x="1018" y="672">&lt; threshold → warning in the UI</text>
+  </g>
+
+  <!-- internal arrows in model column -->
+  <path d="M1180 242 L1180 252" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <path d="M1180 316 L1180 326" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <path d="M1180 390 L1180 400" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <path d="M1180 464 L1180 474" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <path d="M1180 538 L1180 548" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+  <path d="M1180 612 L1180 622" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrowLight)"/>
+
+  <!-- step 3 arrow back to client: JSON response -->
+  <path d="M1000 700 C 940 760, 760 780, 500 768" fill="none" stroke="#475569" stroke-width="1.6" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+  <circle cx="1000" cy="700" r="11" fill="#7c2d12"/>
+  <text x="1000" y="705" font-size="12" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+  <text x="735" y="797" font-size="12" fill="#475569" text-anchor="middle">JSON: class, confidence, calories, macros, fiber, imageUrl</text>
+
+  <!-- ============ Offline pipeline band ============ -->
+  <rect x="40" y="812" width="1320" height="66" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.3"/>
+  <text x="58" y="834" font-size="12" font-weight="700" letter-spacing="1.5" fill="#7c3aed">OFFLINE ML PIPELINE</text>
+  <text x="262" y="834" font-size="12.5" fill="#0f172a">Food-101 (101k) + Nutrition5k → label alignment → 70/15/15 splits → two-stage training (AMP) → best_model.pth</text>
+  <text x="58" y="856" font-size="12" fill="#334155">Optimization: L1 pruning (20/30/50%) · dynamic INT8 quantization · FP32/INT8 latency + held-out accuracy benchmark</text>
+  <text x="58" y="872" font-size="11" fill="#94a3b8">Artifacts: ml/optimization/benchmark_results.md · Model card: ml/MODEL_CARD.md · Checkpoint gate: backend/app/model_validation.py</text>
+</svg>

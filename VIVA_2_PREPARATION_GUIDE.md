@@ -27,8 +27,8 @@
 
 ### 1.1 The Clinical & Practical Problem
 Managing caloric and macronutrient intake is crucial for diabetes management, obesity mitigation, cardiovascular therapy, and athletic performance. However, traditional self-reporting methods (such as manually typing ingredients into MyFitnessPal or Cronometer) suffer from:
-- **High Friction & Burnout**: Studies indicate that **over 84% of dietary logging apps are abandoned** within the first 30 days due to the tedium of manual meal logging.
-- **Cognitive Estimation Bias**: Laypersons routinely underestimate caloric density by **30% to 50%**, particularly in complex mixed dishes, restaurant preparations, and calorie-dense sauces.
+- **High Friction & Burnout**: Manual food logging is widely reported to suffer high abandonment rates because of the tedium of per-meal entry.
+- **Cognitive Estimation Bias**: Laypersons routinely misjudge caloric density, particularly in complex mixed dishes, restaurant preparations, and calorie-dense sauces.
 - **Portion Ambiguity**: Standard volumetric portion guides (cups, tablespoons) rarely correspond to real-world cafeteria or plated meals.
 
 ### 1.2 The Machine Learning Solution
@@ -40,20 +40,20 @@ A single RGB food photograph is fed into a unified neural network that simultane
 
 ```mermaid
 flowchart LR
-    Img[RGB Food Image 3x224x224] --> Backbone[ResNet-50 / EfficientNet Backbone]
+    Img[RGB Food Image 3x224x224] --> Backbone[ResNet-50 Backbone]
     Backbone --> Latent[Shared Representation Bottleneck]
     Latent --> HeadCls[Classification Head<br/>101 Culinary Classes]
     Latent --> HeadReg[Regression Head<br/>Calories, Protein, Carbs, Fat]
     HeadCls --> OutputJSON[Unified Prediction Schema]
     HeadReg --> OutputJSON
-    OutputJSON --> FiberDerive[Deterministic USDA Fiber Derivation]
+    OutputJSON --> FiberDerive[Category-Based Fiber Heuristic]
 ```
 
 ### 1.3 Why Multi-Task Learning (MTL) Instead of Separate Models?
 In traditional architectures, developers train one CNN for classification and a separate regression CNN (or use tabular lookups). We deliberately chose a **Multi-Task CNN** for three fundamental reasons:
 1. **Shared Representation & Inductive Bias**: Learning to classify food forces the convolutional filters to learn fine-grained dish textures (e.g., grain boundaries in rice, searing on meat, cheese melt). The regression head leverages these exact same visual semantic cues to estimate energy density.
 2. **Implicit Regularization**: Jointly optimizing classification and regression gradients acts as a natural regularizer, reducing the risk of overfitting on smaller regression samples.
-3. **Inference Efficiency ($O(1)$ Forward Pass)**: A single forward pass through the shared feature backbone cuts computational floating-point operations (FLOPs) and inference latency by nearly **50%** compared to maintaining two distinct deep networks.
+3. **Inference Efficiency ($O(1)$ Forward Pass)**: A single forward pass through the shared feature backbone avoids running two separate deep networks, reducing duplicated convolution work and parameter storage.
 
 ---
 
@@ -179,7 +179,7 @@ c:\Users\KARAN\Food Image Calorie Estimator\
 │   │   ├── __init__.py                    # App package initializer
 │   │   ├── main.py                        # FastAPI routes (/api/predict, /api/health, auth, history)
 │   │   ├── model.py                       # Backend-optimized MultiTaskFoodCNN definition
-│   │   ├── predictor.py                   # Image transforms, forward inference & USDA fiber derivation
+│   │   ├── predictor.py                   # Image transforms, forward inference & category-based fiber heuristic
 │   │   ├── database.py                    # SQLite persistence layer for users and scan history
 │   │   ├── auth.py                        # PBKDF2 password hashing & RFC 7519 JWT verification
 │   │   └── schemas.py                     # Pydantic v2 request/response schemas
@@ -288,7 +288,7 @@ flowchart TD
 Examiners frequently ask: *"Why does your model predict 4 nutrition outputs instead of 5 if your UI displays Fiber?"*  
 - **Ground Truth Integrity**: Nutrition5k sensor logs record only Calories, Protein, Carbohydrates, and Fat. They **do NOT** measure dietary fiber.
 - **Preventing Gradient Hallucination**: Training a neural network head on fabricated or hallucinated fiber targets introduces synthetic noise into the loss gradients, harming classification and calorie accuracy.
-- **Scientific Solution**: The neural network strictly predicts the 4 ground-truth targets ($N=4$). Dietary fiber is derived downstream in `backend/app/predictor.py` via `derive_dietary_fiber()` using deterministic USDA category ratios (e.g., 22% of carbs for legumes/salads, 10% for mixed bowls, 5% for refined grains).
+- **Scientific Solution**: The neural network strictly predicts the 4 ground-truth targets ($N=4$). Dietary fiber is estimated downstream in `backend/app/predictor.py` via `derive_dietary_fiber()` using category-based carb ratios (e.g., 22% for legumes/salads/quinoa, 10% for bowls and mixed dishes, 5% for refined carbs and meats). This is an explicit heuristic, not a trained prediction or a per-item USDA lookup.
 
 ### 4.4 Stratified Deterministic Data Splitting (`ml/data/splits.py`)
 To prevent data leakage and ensure repeatable evaluation:
@@ -498,37 +498,24 @@ scaler.update()
 - **FP16 Tensor Cores**: Matrix multiplications in convolutional layers execute in 16-bit half precision on NVIDIA Tensor Cores.
 - **Master Weights in FP32**: Gradient accumulation and weight updates are preserved in 32-bit precision to maintain numerical stability.
 - **Dynamic Gradient Scaling (`GradScaler`)**: Multiplies the loss by a dynamic scale factor before backward propagation to prevent small gradients from underflowing to zero in FP16.
-- **Performance Gains**:
-  - **Memory Footprint**: Reduces activation memory consumption by **~45%**.
-  - **Training Speed**: Delivers a **$1.8\times$ to $2.2\times$ speedup** in batch throughput.
+- **Performance Gains** (expected, not yet measured in this repository):
+  - Reduces activation memory consumption by roughly 40–50% for typical ResNet-50 batches.
+  - Improves batch throughput on tensor-core GPUs versus pure FP32.
 
 ### 6.4 Hyperparameter Sweeps: Balancing Multi-Task Weights (`sweep_loss_weights.py`)
 A core challenge in multi-task learning is balancing competing loss terms:
 - If $\lambda_{\text{cls}} \gg \lambda_{\text{reg}}$, the network excels at classification but produces poor calorie estimates.
 - If $\lambda_{\text{reg}} \gg \lambda_{\text{cls}}$, the network minimizes continuous error but fails to distinguish similar dishes.
 
-We executed a systematic grid search via `ml/training/sweep_loss_weights.py` across candidate pairs:
+`ml/training/sweep_loss_weights.py` supports a grid over candidate pairs:
 
 $$\{(\lambda_{\text{cls}}, \lambda_{\text{reg}})\} \in \{(0.5, 0.5), (0.5, 1.0), (1.0, 0.5), (1.0, 1.0), (1.0, 2.0), (2.0, 1.0), (2.0, 2.0)\}$$
 
-```
-    Multi-Task Loss Weight Pareto Frontier (from 03_loss_weight_analysis.ipynb)
-    
-    Validation Classification Accuracy (%)
-       ^
-    85 |                     * (1.0, 0.5)
-       |
-    80 |            * (1.0, 1.0) <-- Optimal Pareto Balance Point
-       |
-    75 |                          * (0.5, 1.0)
-       |
-    70 |   * (0.5, 2.0)
-       +---------------------------------------------->
-          120      100       80       60       40
-                     Validation Calorie MAE (kcal)  [Lower is Better]
-```
-
-- **Analysis**: The balanced configuration **$(\lambda_{\text{cls}} = 1.0, \lambda_{\text{reg}} = 1.0)$** yielded the optimal trade-off on the validation split, achieving high Top-1 accuracy while keeping caloric MAE under control.
+- **Status**: the sweep tooling and the analysis notebook exist, but **no sweep
+  has been run to completion** in this repository. There is therefore no
+  measured Pareto frontier and no evidence-based "optimal" weight pair; the
+  training config currently uses the defaults in `ml/configs/base.yaml`.
+  Any accuracy/MAE axes shown in a report must come from an actual sweep run.
 
 ---
 
@@ -546,7 +533,7 @@ $$\{(\lambda_{\text{cls}}, \lambda_{\text{reg}})\} \in \{(0.5, 0.5), (0.5, 1.0),
 ```
 
 ### 7.1 Comprehensive Model Evaluation Suite (`ml/evaluation/evaluate.py`)
-To prevent biased reporting, our evaluation framework calculates metrics across both classification and regression tasks on the held-out test split:
+To prevent biased reporting, our evaluation framework calculates metrics across both classification and regression tasks on the held-out test split. The installed checkpoint (trained 2026-11-17) scores **78.86% top-1 / 93.92% top-5** with **48.44 kcal** calorie MAE (RMSE 67.29 kcal, r 0.845, R² 0.714) on the 15,150 test images; JSON, Markdown, and plots are in `ml/evaluation/results/`. Nutrition targets are class-level proxies, so the regression rows measure agreement with those priors.
 
 #### 1. Classification Metrics
 - **Top-1 Accuracy**: Proportion of images where the argmax logit matches the true class.
@@ -594,10 +581,16 @@ quantized_model = torch.quantization.quantize_dynamic(
   $$q = \text{round}\left(\frac{W}{S}\right) + Z, \quad W \approx S \cdot (q - Z)$$
   
 - **Dynamic Activations**: Activations are read as FP32, dynamically quantized to INT8 for compute-intensive matrix multiplication, and then de-quantized back to FP32.
-- **Benefits**:
-  - **Model Size**: Drops from **~98 MB down to ~35 MB** (a **64% storage reduction**).
-  - **Memory Bandwidth**: Significantly reduces RAM access bottlenecks on CPU.
-  - **Accuracy Impact**: Negligible degradation (<0.8% loss in classification accuracy; MAE shifts by less than 1.2 kcal).
+- **Benefits (mechanism)**:
+  - **Model Size**: Only `nn.Linear` weights are quantized, so the saving is
+    modest for a convolution-heavy ResNet. The measured artifact shrank from
+    96.17 MB to 91.65 MB (−4.7%).
+  - **Memory Bandwidth**: Reduces RAM access bottlenecks on CPU for the dense
+    layers.
+  - **Accuracy Impact**: The INT8 artifact is built from the installed
+    checkpoint and measured at 79.52% top-1 / 47.94 kcal MAE on 1,504 held-out
+    test images, versus 77.93% / 48.99 kcal for FP32 — a difference within
+    sampling noise, so no accuracy gain is claimed.
 
 #### 2. TorchScript JIT Tracing (`export_torchscript`)
 - **Graph Serialization**: Traces the PyTorch model with a dummy tensor (`torch.randn(1, 3, 224, 224)`), compiling the Python execution graph into an optimized C++ Intermediate Representation (IR).
@@ -608,27 +601,36 @@ quantized_model = torch.quantization.quantize_dynamic(
 - Enables execution across specialized runtimes such as ONNX Runtime, TensorRT, CoreML, and WebAssembly in browser runtimes.
 
 ### 7.3 Latency & Inference Benchmarking (`benchmark_latency`)
-Inference benchmarking was conducted over 100 iterations with 15 warmup cycles to simulate real-world production load:
+Inference benchmarking runs 100 iterations after 15 warmup cycles. The latest
+artifact in `ml/optimization/benchmark_results.md` was produced from the trained
+2026-11-17 checkpoint and evaluates every variant on 1,504 held-out test images:
 
 ```
-+------------------------------------+----------------+-------------------+-----------------+
-| METRIC                             | FP32 BASELINE  | INT8 QUANTIZED    | RELATIVE GAIN   |
-+------------------------------------+----------------+-------------------+-----------------+
-| Model Checkpoint Size              | 98.4 MB        | 35.2 MB           | 64.2% Smaller   |
-| CPU Latency (Mean)                 | 112.4 ms       | 46.1 ms           | 2.44x Faster    |
-| CPU Latency (P50 Median)           | 108.2 ms       | 44.5 ms           | 2.43x Faster    |
-| CPU Latency (P95 Tail)             | 128.6 ms       | 52.8 ms           | 2.43x Faster    |
-| CPU Latency (P99 Tail)             | 145.1 ms       | 61.2 ms           | 2.37x Faster    |
-| Throughput (FPS on 4-Core CPU)     | 8.9 FPS        | 21.7 FPS          | +143.8%         |
-| GPU Latency (Tesla T4 Tensor Core) | 12.8 ms        | N/A (CPU targeted)| Real-time       |
-+------------------------------------+----------------+-------------------+-----------------+
+| Variant        | Size     | CPU mean | GPU mean | Top-1  | Top-5  | Calorie MAE |
+| FP32 baseline  | 96.17 MB | 44.81 ms | 8.29 ms  | 77.93% | 94.41% | 48.99 kcal  |
+| Pruned 20%     | 96.19 MB | 47.20 ms | 8.74 ms  | 76.20% | 93.02% | 49.80 kcal  |
+| Pruned 30%     | 96.19 MB | 44.10 ms | 8.59 ms  | 75.93% | 92.75% | 50.56 kcal  |
+| Pruned 50%     | 96.19 MB | 45.71 ms | 9.04 ms  | 75.07% | 92.49% | 51.61 kcal  |
+| Dynamic INT8   | 91.65 MB | 45.39 ms | N/A      | 79.52% | 94.48% | 47.94 kcal  |
 ```
+
+- Pruning keeps classification accuracy within ~3 points of FP32, but does not
+  shrink the file or speed up CPU inference: L1 pruning is unstructured, so the
+  tensors stay dense and PyTorch's dense kernels see no benefit.
+- Dynamic INT8 only quantizes the Linear head (the convolutions, which are most
+  of the FLOPs, stay FP32), so its ~5% size reduction does not translate into a
+  meaningful latency win. Static quantization of the convolutions or
+  sparse-aware kernels would be the next step.
+- The INT8 accuracy figure (79.5%) is within sampling noise of FP32 (77.9% on
+  1,504 images, roughly ±2 points at 95% confidence) — not a genuine improvement.
+- Latencies depend on the host CPU; re-run `ml/optimization/benchmark.py` and
+  quote its table rather than hardcoding numbers in slides.
 
 ---
 
 ## 8. End-to-End System Integration: ML Model to Backend API & UI
 
-The engineering effort extends beyond training: the trained model checkpoint (`best_model.pth`) is integrated into a production microservice serving a reactive client.
+The engineering effort extends beyond training: a validated checkpoint is loaded by the FastAPI predictor, which serves a reactive client. A checkpoint that fails validation is never served — the API returns `503` and `/api/health` exposes the exact rejection codes.
 
 ```mermaid
 sequenceDiagram
@@ -647,7 +649,7 @@ sequenceDiagram
     Engine->>Engine: get_eval_transform() -> Tensor (1, 3, 224, 224)
     Engine->>Engine: Model Forward Pass -> Logits & Normalized Regressions
     Engine->>Engine: Softmax Confidence & De-Normalize Macros (z * std + mean)
-    Engine->>Engine: Deterministic USDA Dietary Fiber Calculation
+    Engine->>Engine: Category-Based Dietary Fiber Heuristic
     Engine-->>API: Structured Prediction Dict
     API->>DB: Log Transaction Record into History Table
     API-->>UI: 200 OK (Full Prediction JSON Payload)
@@ -659,7 +661,7 @@ sequenceDiagram
 ### 8.1 Backend Prediction Pipeline (`backend/app/predictor.py`)
 1. **Model Loading & Fallback**: Automatically checks for `MODEL_WEIGHTS_PATH`. If a trained `.pth` checkpoint is present, it loads weights into `MultiTaskFoodCNN`; otherwise, it runs a zero-config calibrated heuristic fallback for automated CI testing.
 2. **De-Normalization**: Applies train-set target statistics ($z \cdot \sigma + \mu$) to restore physical units.
-3. **USDA Fiber Derivation**: Evaluates carbohydrates and food category to deterministically derive dietary fiber grams.
+3. **Fiber Heuristic**: Evaluates carbohydrates and food category to estimate dietary fiber grams (not a trained output).
 4. **Confidence Scoring & Safety Guardrails**: Calculates softmax confidence percentage:
    - If confidence is **$\ge 65\%$**, renders green confidence pill badge.
    - If confidence is **$< 65\%$**, flags `isLowConfidence = True`, triggering the `LowConfidenceAlert` warning component advising the user on lighting, framing, and camera blur.
@@ -689,7 +691,7 @@ Be prepared to answer these technical questions during your viva defense:
 
 #### Q3: Why does your neural network output 4 continuous values instead of 5 if your UI displays dietary fiber?
 **Answer**:  
-*"Ground-truth integrity was a non-negotiable engineering priority. The Nutrition5k dataset records ground-truth scale measurements for Calories, Protein, Carbohydrates, and Fat, but it does NOT measure dietary fiber. Training a neural network head on fabricated or hallucinated fiber targets would inject synthetic noise into backpropagation gradients, degrading overall model performance. Therefore, our model strictly predicts the 4 true ground-truth targets ($N=4$). Dietary fiber is derived deterministically downstream in `backend/app/predictor.py` using established USDA category fiber-to-carbohydrate ratio benchmarks."*
+*"Ground-truth integrity was a non-negotiable engineering priority. The Nutrition5k dataset records ground-truth scale measurements for Calories, Protein, Carbohydrates, and Fat, but it does NOT measure dietary fiber. Training a neural network head on fabricated or hallucinated fiber targets would inject synthetic noise into backpropagation gradients, degrading overall model performance. Therefore, our model strictly predicts the 4 true ground-truth targets ($N=4$). Dietary fiber is derived deterministically downstream in `backend/app/predictor.py` using category-based fiber-to-carbohydrate ratio heuristics."*
 
 #### Q4: What is the purpose of the shared 512-dimensional bottleneck layer before the task heads?
 **Answer**:  
@@ -709,7 +711,7 @@ Be prepared to answer these technical questions during your viva defense:
 
 #### Q7: How did you select the loss weights $\lambda_{\text{cls}}$ and $\lambda_{\text{reg}}$?
 **Answer**:  
-*"We conducted a systematic grid search using `ml/training/sweep_loss_weights.py` across candidate pairs ranging from 0.5 to 2.0. By plotting validation classification accuracy against validation calorie MAE (analyzed in `ml/notebooks/03_loss_weight_analysis.ipynb`), we identified the Pareto frontier. The balanced configuration $(\lambda_{\text{cls}} = 1.0, \lambda_{\text{reg}} = 1.0)$ achieved the optimal trade-off, maintaining strong classification performance without sacrificing regression precision."*
+*"We built `ml/training/sweep_loss_weights.py` to grid-search candidate pairs between 0.5 and 2.0, and `ml/notebooks/03_loss_weight_analysis.ipynb` to plot validation classification accuracy against validation calorie MAE. That sweep has not been run to completion in this repository, so we are not claiming a Pareto frontier or an optimal weight pair yet; the defaults in `ml/configs/base.yaml` are used until a real sweep has been recorded."*
 
 ---
 
@@ -737,7 +739,7 @@ Be prepared to answer these technical questions during your viva defense:
 
 #### Q12: How does Automatic Mixed Precision (AMP) improve training?
 **Answer**:  
-*"AMP uses `torch.amp.autocast` to execute compute-intensive forward passes and matrix convolutions in 16-bit half precision (FP16) on NVIDIA Tensor Cores, while keeping master weights and updates in 32-bit single precision (FP32). To prevent small gradients from underflowing to zero in FP16, `torch.amp.GradScaler` dynamically scales the loss before backpropagation. This reduced our VRAM usage by ~45% and accelerated training throughput by approximately $2\times$ without any degradation in final model accuracy."*
+*"AMP uses `torch.amp.autocast` to execute compute-intensive forward passes and matrix convolutions in 16-bit half precision (FP16) on NVIDIA Tensor Cores, while keeping master weights and updates in 32-bit single precision (FP32). To prevent small gradients from underflowing to zero in FP16, `torch.amp.GradScaler` dynamically scales the loss before backpropagation. The expected benefit is lower activation memory and higher tensor-core throughput; we have not profiled those gains in this repository, so no VRAM or speedup percentage is claimed."*
 
 ---
 
@@ -749,7 +751,7 @@ Be prepared to answer these technical questions during your viva defense:
 
 #### Q14: How does dynamic INT8 quantization work, and what were the measured performance gains?
 **Answer**:  
-*"Dynamic INT8 quantization converts the weights of dense linear layers from 32-bit floating point to signed 8-bit integers using an affine scale factor and zero-point. During inference, activations are dynamically quantized to INT8, multiplied using integer arithmetic, and de-quantized back to FP32. This reduced our model checkpoint size from 98.4 MB to 35.2 MB (a 64% reduction) and accelerated CPU inference latency from 112.4 ms to 46.1 ms (a $2.44\times$ speedup), with less than 0.8% loss in accuracy."*
+*"Dynamic INT8 quantization converts the weights of dense linear layers from 32-bit floating point to signed 8-bit integers using an affine scale factor and zero-point. During inference, activations are dynamically quantized to INT8, multiplied using integer arithmetic, and de-quantized back to FP32. In our local benchmark the checkpoint shrank from 98.4 MB to 91.65 MB and mean CPU latency moved from 43.67 ms to 41.51 ms. The saving is limited because ResNet-50 is convolution-heavy and we only quantize Linear layers. That INT8 artifact predates the trained checkpoint, so we claim no accuracy delta for quantization; the FP32 checkpoint itself scores 78.86% top-1 / 48.44 kcal calorie MAE on the held-out test split."*
 
 #### Q15: Why did you export the model to TorchScript and ONNX?
 **Answer**:  

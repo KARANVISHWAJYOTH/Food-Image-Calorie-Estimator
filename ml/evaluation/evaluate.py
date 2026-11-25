@@ -599,7 +599,11 @@ def main() -> None:
             mape=cal_mape,
         )
 
-    print("\n" + report_markdown + "\n")
+    try:
+        print("\n" + report_markdown + "\n")
+    except UnicodeEncodeError:
+        # The Markdown report contains emoji; legacy Windows consoles use cp1252.
+        print("\n" + report_markdown.encode("ascii", errors="replace").decode("ascii") + "\n")
     LOGGER.info(f"Summary metrics saved to {metrics_json_path}")
     LOGGER.info(f"Report Markdown saved to {report_md_path}")
     LOGGER.info(f"Plots saved to {cm_plot_path} and {scatter_plot_path}")

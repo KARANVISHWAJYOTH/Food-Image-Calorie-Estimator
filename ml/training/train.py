@@ -359,12 +359,16 @@ def train(args: argparse.Namespace) -> Path:
         shuffle=True,
         num_workers=args.num_workers,
         generator=generator,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=args.num_workers > 0,
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=args.num_workers,
+        pin_memory=torch.cuda.is_available(),
+        persistent_workers=args.num_workers > 0,
     )
 
     device = torch.device(

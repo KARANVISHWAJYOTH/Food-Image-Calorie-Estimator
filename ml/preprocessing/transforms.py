@@ -35,6 +35,8 @@ def get_train_transform(
 ) -> transforms.Compose:
     """Build the configured food-photo augmentation pipeline for training."""
     size = _get_image_size(image_size)
+    # Crop before the pixel-wise ops: rotating/jittering a full-resolution photo
+    # costs several times more than rotating the 224px crop and changes nothing else.
     if preset == "light":
         augmentation = [
             transforms.RandomResizedCrop(
@@ -47,10 +49,6 @@ def get_train_transform(
         ]
     elif preset == "standard":
         augmentation = [
-            transforms.RandomRotation(
-                degrees=8,
-                interpolation=InterpolationMode.BILINEAR,
-            ),
             transforms.RandomResizedCrop(
                 size,
                 scale=(0.8, 1.0),
@@ -58,6 +56,10 @@ def get_train_transform(
                 antialias=True,
             ),
             transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(
+                degrees=8,
+                interpolation=InterpolationMode.BILINEAR,
+            ),
             transforms.ColorJitter(
                 brightness=0.15,
                 contrast=0.15,
@@ -67,10 +69,6 @@ def get_train_transform(
         ]
     elif preset == "strong":
         augmentation = [
-            transforms.RandomRotation(
-                degrees=18,
-                interpolation=InterpolationMode.BILINEAR,
-            ),
             transforms.RandomResizedCrop(
                 size,
                 scale=(0.65, 1.0),
@@ -79,6 +77,10 @@ def get_train_transform(
                 antialias=True,
             ),
             transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomRotation(
+                degrees=18,
+                interpolation=InterpolationMode.BILINEAR,
+            ),
             transforms.ColorJitter(
                 brightness=0.3,
                 contrast=0.3,

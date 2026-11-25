@@ -33,35 +33,24 @@ def load_config() -> dict:
 
 
 def extract_ingredient_names(fields: list[str], source: Path, line_number: int) -> str:
-    if len(fields) < 7:
-        raise ValueError(
-            f"{source}:{line_number}: expected num_ingrs after the six dish-level fields."
-        )
-    try:
-        ingredient_count = int(fields[6])
-    except ValueError as error:
-        raise ValueError(
-            f"{source}:{line_number}: num_ingrs must be an integer."
-        ) from error
-    if ingredient_count < 0:
-        raise ValueError(f"{source}:{line_number}: num_ingrs cannot be negative.")
-    if ingredient_count == 0:
-        return ""
+    """Read the ingredient tuples that follow the six dish-level fields.
 
-    ingredient_fields = fields[7:]
-    if len(ingredient_fields) % ingredient_count != 0:
+    The official Nutrition5k metadata stores each ingredient as seven values:
+    ingredient_id, name, grams, calories, fat, carbohydrate, protein.
+    """
+    ingredient_fields = fields[6:]
+    if not ingredient_fields:
+        return ""
+    fields_per_ingredient = 7
+    if len(ingredient_fields) % fields_per_ingredient != 0:
         raise ValueError(
-            f"{source}:{line_number}: ingredient fields do not match num_ingrs."
-        )
-    fields_per_ingredient = len(ingredient_fields) // ingredient_count
-    if fields_per_ingredient < 2:
-        raise ValueError(
-            f"{source}:{line_number}: ingredient records must include an ingredient name."
+            f"{source}:{line_number}: ingredient fields must be groups of "
+            f"{fields_per_ingredient} values (id, name, grams, calories, fat, carbs, protein)."
         )
 
     names = [
         ingredient_fields[index * fields_per_ingredient + 1].strip()
-        for index in range(ingredient_count)
+        for index in range(len(ingredient_fields) // fields_per_ingredient)
     ]
     return "; ".join(name for name in names if name)
 
@@ -73,9 +62,9 @@ def read_metadata(path: Path) -> list[dict]:
         for line_number, fields in enumerate(reader, start=1):
             if line_number == 1 and fields and fields[0].strip().lower() == "dish_id":
                 continue
-            if len(fields) < 7:
+            if len(fields) < 6:
                 raise ValueError(
-                    f"{path}:{line_number}: expected dish fields followed by num_ingrs."
+                    f"{path}:{line_number}: expected six dish-level fields before ingredients."
                 )
 
             dish_id = fields[0].strip()
@@ -96,6 +85,9 @@ def read_metadata(path: Path) -> list[dict]:
                 raise ValueError(
                     f"{path}:{line_number}: nutrition values must be finite and non-negative."
                 )
+            if calories <= 0.0:
+                # Zero-calorie dish rows in the metadata carry no usable signal.
+                continue
 
             ingredient_names = extract_ingredient_names(fields, path, line_number)
             rows.append(

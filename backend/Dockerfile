@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+# CPU-only PyTorch: the container serves inference on CPU. Installing from the
+# CPU wheel index avoids ~3 GB of unused CUDA libraries and still satisfies
+# the torch/torchvision pins in requirements.txt.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .

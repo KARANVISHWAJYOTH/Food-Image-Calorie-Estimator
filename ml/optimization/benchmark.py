@@ -11,9 +11,11 @@ Measures:
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
+import gc
 import logging
-from math import sqrt
+from math import ceil, sqrt
 from pathlib import Path
 import sys
 import time
@@ -106,7 +108,11 @@ def evaluate_test_accuracy_and_mae(
     target_stats: Optional[Mapping[str, Any]] = None,
     max_eval_batches: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Evaluate Top-1, Top-5 accuracy and Calorie MAE on held-out test split."""
+    """Evaluate Top-1, Top-5 accuracy and Calorie MAE on held-out test split.
+
+    The evaluation loader yields raw nutrition targets (no z-score normalization),
+    so only the model's normalized calorie predictions are de-normalized here.
+    """
     if loader is None or len(loader) == 0:
         return {"top1_acc": 0.0, "top5_acc": 0.0, "calorie_mae": 0.0, "samples": 0}
 
@@ -196,6 +202,19 @@ def load_model_variant(
     return model, target_stats
 
 
+def _find_fp32_checkpoint() -> Optional[Path]:
+    candidates = [
+        ML_DIR / "training" / "checkpoints" / "best.pt",
+        ML_DIR / "training" / "checkpoints" / "best_model.pth",
+        REPOSITORY_ROOT / "backend" / "app" / "best_model.pth",
+        REPOSITORY_ROOT / "best_model.pth",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def generate_tables(results: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
     """Format benchmark rows as both Markdown and CSV-ready dictionaries."""
     md_lines = [
@@ -203,24 +222,27 @@ def generate_tables(results: list[dict[str, Any]]) -> tuple[str, list[dict[str, 
         "",
         "Comparison of Original FP32 Baseline vs. Pruned (20%, 30%, 50%) and INT8 Quantized models.",
         "",
-        "| Model Variant | Type / Sparsity | Size (MB) | Size Delta | CPU Latency Mean (ms) | CPU P95 (ms) | CPU Speedup | GPU Latency (ms) | Top-1 Acc (%) | Calorie MAE (kcal) |",
-        "|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
+        "| Model Variant | Type / Sparsity | Size (MB) | Size Delta | CPU Latency Mean (ms) | CPU P95 (ms) | CPU Speedup | GPU Latency (ms) | Top-1 Acc (%) | Top-5 Acc (%) | Calorie MAE (kcal) |",
+        "|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
     ]
 
-    base_size = results[0]["size_mb"] if results and results[0]["size_mb"] > 0 else 98.4
-    base_cpu_lat = results[0]["cpu_mean_ms"] if results and results[0]["cpu_mean_ms"] > 0 else 100.0
+    base_size = results[0]["size_mb"] if results else 0.0
+    base_cpu_lat = results[0]["cpu_mean_ms"] if results else 0.0
 
     csv_rows = []
     for r in results:
         size_delta = f"-{round((1.0 - r['size_mb'] / base_size) * 100, 1)}%" if base_size > 0 and r["size_mb"] < base_size else "Baseline"
         speedup = f"{round(base_cpu_lat / max(0.01, r['cpu_mean_ms']), 2)}x" if r["cpu_mean_ms"] > 0 else "—"
         gpu_str = f"{r['gpu_mean_ms']} ms" if r["gpu_mean_ms"] is not None else "N/A"
-        top1_str = f"{r['top1_acc']}%" if r["top1_acc"] > 0 else "N/A"
-        mae_str = f"{r['calorie_mae']} kcal" if r["calorie_mae"] > 0 else "N/A"
+        has_accuracy = r.get("top1_acc", 0) > 0
+        top1_str = f"{r['top1_acc']}%" if has_accuracy else "N/A"
+        top5_str = f"{r['top5_acc']}%" if has_accuracy else "N/A"
+        mae_str = f"{r['calorie_mae']} kcal" if has_accuracy else "N/A"
 
         md_lines.append(
             f"| **{r['name']}** | {r['type']} | {r['size_mb']} MB | {size_delta} | "
-            f"{r['cpu_mean_ms']} ms | {r['cpu_p95_ms']} ms | **{speedup}** | {gpu_str} | {top1_str} | {mae_str} |"
+            f"{r['cpu_mean_ms']} ms | {r['cpu_p95_ms']} ms | **{speedup}** | {gpu_str} | "
+            f"{top1_str} | {top5_str} | {mae_str} |"
         )
 
         csv_rows.append({
@@ -239,11 +261,26 @@ def generate_tables(results: list[dict[str, Any]]) -> tuple[str, list[dict[str, 
             "calorie_mae_kcal": r["calorie_mae"],
         })
 
+    sample_count = max((r.get("samples", 0) for r in results), default=0)
+    eval_note = (
+        f"> **Accuracy Setup:** Top-1, Top-5 and calorie MAE are measured on "
+        f"{sample_count} held-out test-split images (raw kcal targets, model outputs de-normalized)."
+        if sample_count > 0
+        else "> **Accuracy Setup:** No held-out evaluation samples were available."
+    )
     md_lines.extend([
         "",
         "> **Benchmark Setup:** Latencies measured on 100 iterations after 15 warmup cycles using `torch.randn(1, 3, 224, 224)` inputs.",
         "> **Note on Quantization:** Dynamic INT8 converts Linear layer weights to 8-bit integers, optimized specifically for fast CPU inference.",
+        eval_note,
     ])
+    if any(r.get("samples", 0) == 0 for r in results):
+        md_lines.append(
+            "> **Accuracy caveat:** Top-1, Top-5 and Calorie MAE are N/A for variants "
+            "without a held-out evaluation (missing dataset or checkpoint without "
+            "target_stats). Latency and size figures describe this machine only "
+            "and imply nothing about model quality."
+        )
 
     return "\n".join(md_lines), csv_rows
 
@@ -286,47 +323,64 @@ def main() -> None:
         test_indices = manifest["split_indices"]["test"]
         eval_transform = get_eval_transform(image_size=config.get("image_size", 224))
         test_dataset = ManifestDataset(samples, test_indices, eval_transform)
-        test_loader = DataLoader(test_dataset, batch_size=config.get("batch_size", 32), shuffle=False)
+        # The manifest is class-ordered, so a deterministic shuffle keeps
+        # --max-test-samples an unbiased sample across all 101 classes.
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=config.get("batch_size", 32),
+            shuffle=True,
+            generator=torch.Generator().manual_seed(42),
+        )
         LOGGER.info(f"Loaded {len(test_dataset)} test samples for accuracy & MAE benchmarking.")
     except Exception as e:
         LOGGER.warning(f"Could not load test split ({e}). Benchmark will report latency and size.")
 
-    # Candidate models to evaluate
+    fp32_checkpoint = args.fp32_checkpoint or _find_fp32_checkpoint()
+    if fp32_checkpoint is None or not fp32_checkpoint.is_file():
+        parser.error(
+            "No FP32 checkpoint found. Train the model first and pass --fp32-checkpoint "
+            "(or place it at ml/training/checkpoints/best.pt)."
+        )
+
+    # Candidate models to evaluate. Missing optional variants are skipped; the
+    # FP32 baseline is mandatory and is never synthesized from random weights.
     candidates = [
-        ("FP32 Baseline", "FP32 Dense", args.fp32_checkpoint or REPOSITORY_ROOT / "best_model.pth"),
+        ("FP32 Baseline", "FP32 Dense", fp32_checkpoint),
         ("Pruned (20%)", "20% Conv L1 Sparsity", OUTPUT_DIR / "best_model_pruned_20.pth"),
         ("Pruned (30%)", "30% Conv L1 Sparsity", OUTPUT_DIR / "best_model_pruned_30.pth"),
         ("Pruned (50%)", "50% Conv L1 Sparsity", OUTPUT_DIR / "best_model_pruned_50.pth"),
         ("INT8 Quantized", "Dynamic INT8 Linear", args.int8_checkpoint),
     ]
 
-    benchmark_rows = []
+    batch_size = int(config.get("batch_size", 32))
+    max_eval_batches = (
+        max(1, ceil(args.max_test_samples / batch_size)) if args.max_test_samples else None
+    )
 
+    available = []
     for name, m_type, path in candidates:
         if path is None or not Path(path).is_file():
-            # If standard candidate file doesn't exist on disk, synthesize representative baseline
-            if name == "FP32 Baseline":
-                model = MultiTaskCNN(backbone=backbone, num_classes=num_classes, pretrained=False)
-                t_stats = None
-                size_mb = 98.4
-            else:
-                LOGGER.info(f"Skipping {name}: checkpoint file not found at {path}")
-                continue
-        else:
-            model, t_stats = load_model_variant(Path(path), backbone=backbone, num_classes=num_classes)
-            size_mb = get_file_size_mb(Path(path))
+            LOGGER.info(f"Skipping {name}: checkpoint file not found at {path}")
+            continue
+        available.append((name, m_type, Path(path)))
 
-        if model is None:
+    if not available:
+        parser.error("No benchmarkable checkpoints were found. Refusing to write an empty report.")
+
+    # Pass 1: latency. Accuracy evaluation is heavy sustained CPU work that heats
+    # the machine, so it runs in a separate pass to keep latency numbers comparable.
+    latency_results: dict[str, dict[str, Any]] = {}
+    for name, _m_type, path in available:
+        model, t_stats = load_model_variant(path, backbone=backbone, num_classes=num_classes)
+        if model is None or t_stats is None:
+            LOGGER.warning(f"Skipping {name}: checkpoint could not be loaded with target_stats.")
             continue
 
-        LOGGER.info(f"\n--- Benchmarking: {name} ---")
-
-        # CPU latency
+        LOGGER.info(f"\n--- Latency: {name} ---")
         model_cpu = model.cpu().eval()
         cpu_stats = benchmark_latency(model_cpu, dummy_input, torch.device("cpu"), warmup=args.warmup, iterations=args.num_runs)
         LOGGER.info(f"CPU Latency: Mean={cpu_stats['mean_ms']}ms, P95={cpu_stats['p95_ms']}ms, FPS={cpu_stats['throughput_fps']}")
 
-        # GPU latency
         gpu_mean = None
         if has_cuda and "INT8" not in name:
             try:
@@ -337,28 +391,54 @@ def main() -> None:
             except Exception as e:
                 LOGGER.warning(f"GPU benchmark skipped for {name}: {e}")
 
-        # Accuracy & Calorie MAE
+        latency_results[name] = {"cpu": cpu_stats, "gpu_mean": gpu_mean}
+        del model, model_cpu
+        gc.collect()
+        if has_cuda:
+            torch.cuda.empty_cache()
+
+    # Pass 2: held-out accuracy and calorie MAE.
+    benchmark_rows = []
+    for name, m_type, path in available:
+        if name not in latency_results:
+            continue
+        model, t_stats = load_model_variant(path, backbone=backbone, num_classes=num_classes)
+        if model is None or t_stats is None:
+            continue
+
+        LOGGER.info(f"\n--- Accuracy: {name} ---")
         test_metrics = evaluate_test_accuracy_and_mae(
-            model_cpu,
+            model.cpu().eval(),
             test_loader,
             torch.device("cpu"),
             target_stats=t_stats,
-            max_eval_batches=args.max_test_samples // 32 if args.max_test_samples else None,
+            max_eval_batches=max_eval_batches,
+        )
+        LOGGER.info(
+            f"Top-1={test_metrics['top1_acc']}%, Top-5={test_metrics['top5_acc']}%, "
+            f"Calorie MAE={test_metrics['calorie_mae']} kcal ({test_metrics['samples']} samples)"
         )
 
+        cpu_stats = latency_results[name]["cpu"]
         benchmark_rows.append({
             "name": name,
             "type": m_type,
-            "size_mb": size_mb,
+            "size_mb": get_file_size_mb(path),
             "cpu_mean_ms": cpu_stats["mean_ms"],
             "cpu_p50_ms": cpu_stats["p50_ms"],
             "cpu_p95_ms": cpu_stats["p95_ms"],
             "cpu_fps": cpu_stats["throughput_fps"],
-            "gpu_mean_ms": gpu_mean,
+            "gpu_mean_ms": latency_results[name]["gpu_mean"],
             "top1_acc": test_metrics["top1_acc"],
             "top5_acc": test_metrics["top5_acc"],
             "calorie_mae": test_metrics["calorie_mae"],
+            "samples": test_metrics["samples"],
         })
+        del model
+        gc.collect()
+
+    if not benchmark_rows:
+        parser.error("No benchmarkable checkpoints were found. Refusing to write an empty report.")
 
     # Save reports
     md_content, csv_rows = generate_tables(benchmark_rows)
@@ -370,6 +450,9 @@ def main() -> None:
             writer.writeheader()
             writer.writerows(csv_rows)
 
+    args.output_md.parent.mkdir(parents=True, exist_ok=True)
+    args.output_md.write_text(md_content + "\n", encoding="utf-8")
+
     try:
         print("\n" + md_content + "\n")
     except Exception:
@@ -378,5 +461,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    import copy
     main()

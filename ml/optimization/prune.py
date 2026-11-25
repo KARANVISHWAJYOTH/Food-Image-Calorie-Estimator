@@ -93,6 +93,38 @@ def apply_l1_unstructured_pruning(
     return model
 
 
+def _assert_trained_checkpoint(
+    state_dict: Mapping[str, Any],
+    class_names: Optional[Sequence[str]],
+    target_stats: Optional[Mapping[str, Any]],
+    val_metrics: Optional[Mapping[str, Any]],
+) -> None:
+    """Refuse to prune a checkpoint that was never trained."""
+    missing = []
+    if not class_names:
+        missing.append("class_names")
+    if not target_stats:
+        missing.append("target_stats")
+    if not val_metrics:
+        missing.append("val_metrics")
+    bn_means = [
+        value
+        for key, value in state_dict.items()
+        if key.endswith("running_mean") and isinstance(value, torch.Tensor)
+    ]
+    if bn_means and all(
+        torch.allclose(value.to(torch.float32), torch.zeros_like(value, dtype=torch.float32), atol=1e-6)
+        for value in bn_means
+    ):
+        missing.append("trained_batch_norm_statistics")
+    if missing:
+        raise SystemExit(
+            "Refusing to prune an untrained/incomplete checkpoint (missing: "
+            + ", ".join(missing)
+            + "). Train the model first."
+        )
+
+
 def fine_tune_pruned_model(
     model: nn.Module,
     loader: DataLoader,
@@ -124,10 +156,13 @@ def fine_tune_pruned_model(
             class_targets = class_targets.to(device)
             nutrition_targets = nutrition_targets.to(device)
 
+            if target_mean is not None and target_std is not None:
+                nutrition_targets = (nutrition_targets - target_mean) / target_std
+
             optimizer.zero_grad()
             with torch.amp.autocast(device_type=device.type, enabled=use_cuda, dtype=torch.float16):
                 logits, nutrition = model(images)
-                loss = criterion(logits, class_targets, nutrition, nutrition_targets)
+                loss, _, _ = criterion((logits, nutrition), class_targets, nutrition_targets)
 
             if use_cuda:
                 scaler.scale(loss).backward()
@@ -173,6 +208,8 @@ def prune_and_finetune(
     fine_tune_epochs: int = 1,
     fine_tune_batches: Optional[int] = 50,
     learning_rate: float = 1e-5,
+    target_mean: Optional[torch.Tensor] = None,
+    target_std: Optional[torch.Tensor] = None,
 ) -> nn.Module:
     """Full pipeline: clone model, apply L1 pruning, short fine-tune, and remove masks."""
     pruned_model = copy.deepcopy(model).to(device)
@@ -186,6 +223,8 @@ def prune_and_finetune(
             epochs=fine_tune_epochs,
             max_batches=fine_tune_batches,
             learning_rate=learning_rate,
+            target_mean=target_mean,
+            target_std=target_std,
         )
     else:
         LOGGER.info("No training data provided for fine-tuning; skipping fine-tune stage.")
@@ -284,19 +323,19 @@ def main() -> None:
 
     if checkpoint_path and checkpoint_path.is_file():
         LOGGER.info(f"Loading weights from: {checkpoint_path}")
-        try:
-            ckpt = load_checkpoint(checkpoint_path)
-            model.load_state_dict(ckpt["model_state_dict"])
-            class_names = ckpt.get("class_names")
-            target_stats = ckpt.get("target_stats")
-            val_metrics = ckpt.get("val_metrics")
-            if isinstance(ckpt.get("metadata"), dict):
-                metadata.update(ckpt["metadata"])
-        except Exception:
-            raw = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-            model.load_state_dict(raw.get("model_state_dict", raw.get("state_dict", raw)))
+        ckpt = load_checkpoint(checkpoint_path)
+        model.load_state_dict(ckpt["model_state_dict"])
+        class_names = ckpt.get("class_names")
+        target_stats = ckpt.get("target_stats")
+        val_metrics = ckpt.get("val_metrics")
+        if isinstance(ckpt.get("metadata"), dict):
+            metadata.update(ckpt["metadata"])
+        _assert_trained_checkpoint(model.state_dict(), class_names, target_stats, val_metrics)
     else:
-        LOGGER.warning("No checkpoint found. Pruning baseline MultiTaskCNN model.")
+        raise SystemExit(
+            "No trained checkpoint found. Refusing to prune a randomly initialized model. "
+            "Train the model first or pass --checkpoint."
+        )
 
     # Setup training loader for fine-tuning if dataset is present
     train_loader = None
@@ -325,6 +364,23 @@ def main() -> None:
     except Exception as e:
         LOGGER.warning(f"Could not load training dataset for fine-tuning ({e}). Proceeding without fine-tuning.")
 
+    target_mean = (
+        torch.tensor(target_stats["mean"], dtype=torch.float32, device=device)
+        if target_stats and "mean" in target_stats
+        else None
+    )
+    target_std = (
+        torch.tensor(target_stats["std"], dtype=torch.float32, device=device)
+        if target_stats and "std" in target_stats
+        else None
+    )
+
+    if train_loader is None:
+        LOGGER.warning(
+            "Pruning will run without fine-tuning because the dataset is unavailable. "
+            "Report accuracy from the evaluation pipeline before deploying these artifacts."
+        )
+
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     for amount in args.amounts:
@@ -341,6 +397,8 @@ def main() -> None:
             fine_tune_epochs=args.fine_tune_epochs,
             fine_tune_batches=args.fine_tune_batches,
             learning_rate=args.learning_rate,
+            target_mean=target_mean,
+            target_std=target_std,
         )
 
         out_path = args.output_dir / f"best_model_pruned_{pct}.pth"

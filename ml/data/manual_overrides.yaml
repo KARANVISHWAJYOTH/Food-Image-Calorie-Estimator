@@ -1,11 +1,99 @@
-# Optional hand-reviewed values. Each entry replaces any automatic text match.
-# Values are dish-level estimates used as class-level modeling proxies, not ground truth.
-overrides: {}
-
-# Example:
-# overrides:
-#   apple_pie:
-#     calories: 300
-#     protein_g: 4
-#     carbohydrates_g: 42
-#     fat_g: 13
+# Curated per-serving nutrition estimates for Food-101 classes where the
+# Nutrition5k ingredient-name match was unavailable or produced invalid values.
+# These are class-level modeling proxies, not measured ground truth.
+# Units: calories (kcal), protein_g, carbohydrates_g, fat_g per standard serving.
+overrides:
+  apple_pie: {calories: 296, protein_g: 3.4, carbohydrates_g: 42, fat_g: 13.4}
+  baby_back_ribs: {calories: 480, protein_g: 34, carbohydrates_g: 12, fat_g: 33}
+  baklava: {calories: 334, protein_g: 5, carbohydrates_g: 40, fat_g: 18}
+  beef_carpaccio: {calories: 220, protein_g: 28, carbohydrates_g: 1, fat_g: 11}
+  beef_tartare: {calories: 240, protein_g: 26, carbohydrates_g: 2, fat_g: 14}
+  beet_salad: {calories: 160, protein_g: 3, carbohydrates_g: 14, fat_g: 10}
+  beignets: {calories: 350, protein_g: 5, carbohydrates_g: 44, fat_g: 17}
+  bibimbap: {calories: 560, protein_g: 24, carbohydrates_g: 76, fat_g: 18}
+  bread_pudding: {calories: 330, protein_g: 6, carbohydrates_g: 45, fat_g: 13}
+  breakfast_burrito: {calories: 550, protein_g: 22, carbohydrates_g: 55, fat_g: 26}
+  bruschetta: {calories: 220, protein_g: 6, carbohydrates_g: 26, fat_g: 10}
+  cannoli: {calories: 230, protein_g: 5, carbohydrates_g: 26, fat_g: 12}
+  caprese_salad: {calories: 250, protein_g: 12, carbohydrates_g: 8, fat_g: 19}
+  carrot_cake: {calories: 340, protein_g: 4, carbohydrates_g: 45, fat_g: 16}
+  ceviche: {calories: 170, protein_g: 18, carbohydrates_g: 10, fat_g: 7}
+  cheesecake: {calories: 400, protein_g: 8, carbohydrates_g: 35, fat_g: 26}
+  cheese_plate: {calories: 380, protein_g: 22, carbohydrates_g: 4, fat_g: 31}
+  chicken_curry: {calories: 420, protein_g: 28, carbohydrates_g: 16, fat_g: 26}
+  chicken_quesadilla: {calories: 520, protein_g: 28, carbohydrates_g: 42, fat_g: 27}
+  chicken_wings: {calories: 430, protein_g: 30, carbohydrates_g: 6, fat_g: 31}
+  chocolate_cake: {calories: 370, protein_g: 5, carbohydrates_g: 50, fat_g: 17}
+  chocolate_mousse: {calories: 280, protein_g: 4, carbohydrates_g: 24, fat_g: 19}
+  churros: {calories: 380, protein_g: 4, carbohydrates_g: 45, fat_g: 20}
+  clam_chowder: {calories: 300, protein_g: 14, carbohydrates_g: 28, fat_g: 14}
+  club_sandwich: {calories: 580, protein_g: 30, carbohydrates_g: 45, fat_g: 31}
+  crab_cakes: {calories: 330, protein_g: 20, carbohydrates_g: 18, fat_g: 20}
+  creme_brulee: {calories: 350, protein_g: 5, carbohydrates_g: 28, fat_g: 25}
+  croque_madame: {calories: 520, protein_g: 28, carbohydrates_g: 38, fat_g: 28}
+  cup_cakes: {calories: 330, protein_g: 4, carbohydrates_g: 45, fat_g: 15}
+  deviled_eggs: {calories: 200, protein_g: 10, carbohydrates_g: 3, fat_g: 17}
+  donuts: {calories: 360, protein_g: 5, carbohydrates_g: 45, fat_g: 18}
+  dumplings: {calories: 320, protein_g: 12, carbohydrates_g: 38, fat_g: 13}
+  edamame: {calories: 190, protein_g: 17, carbohydrates_g: 15, fat_g: 8}
+  eggs_benedict: {calories: 480, protein_g: 20, carbohydrates_g: 30, fat_g: 31}
+  escargots: {calories: 260, protein_g: 16, carbohydrates_g: 6, fat_g: 19}
+  falafel: {calories: 330, protein_g: 13, carbohydrates_g: 32, fat_g: 18}
+  filet_mignon: {calories: 420, protein_g: 38, carbohydrates_g: 1, fat_g: 29}
+  fish_and_chips: {calories: 620, protein_g: 28, carbohydrates_g: 55, fat_g: 32}
+  foie_gras: {calories: 460, protein_g: 11, carbohydrates_g: 5, fat_g: 45}
+  french_fries: {calories: 400, protein_g: 5, carbohydrates_g: 52, fat_g: 19}
+  french_onion_soup: {calories: 340, protein_g: 12, carbohydrates_g: 34, fat_g: 17}
+  french_toast: {calories: 380, protein_g: 10, carbohydrates_g: 42, fat_g: 19}
+  fried_calamari: {calories: 360, protein_g: 18, carbohydrates_g: 28, fat_g: 19}
+  garlic_bread: {calories: 300, protein_g: 7, carbohydrates_g: 36, fat_g: 14}
+  gnocchi: {calories: 430, protein_g: 11, carbohydrates_g: 58, fat_g: 17}
+  grilled_cheese_sandwich: {calories: 480, protein_g: 18, carbohydrates_g: 40, fat_g: 27}
+  grilled_salmon: {calories: 400, protein_g: 40, carbohydrates_g: 1, fat_g: 26}
+  guacamole: {calories: 230, protein_g: 3, carbohydrates_g: 12, fat_g: 20}
+  gyoza: {calories: 330, protein_g: 13, carbohydrates_g: 39, fat_g: 13}
+  hamburger: {calories: 540, protein_g: 27, carbohydrates_g: 42, fat_g: 28}
+  hot_and_sour_soup: {calories: 170, protein_g: 8, carbohydrates_g: 20, fat_g: 6}
+  hot_dog: {calories: 480, protein_g: 18, carbohydrates_g: 40, fat_g: 27}
+  huevos_rancheros: {calories: 480, protein_g: 22, carbohydrates_g: 38, fat_g: 27}
+  hummus: {calories: 240, protein_g: 8, carbohydrates_g: 20, fat_g: 15}
+  ice_cream: {calories: 280, protein_g: 5, carbohydrates_g: 32, fat_g: 15}
+  lasagna: {calories: 460, protein_g: 25, carbohydrates_g: 45, fat_g: 20}
+  lobster_bisque: {calories: 320, protein_g: 14, carbohydrates_g: 18, fat_g: 22}
+  lobster_roll_sandwich: {calories: 500, protein_g: 24, carbohydrates_g: 40, fat_g: 27}
+  macaroni_and_cheese: {calories: 480, protein_g: 17, carbohydrates_g: 52, fat_g: 22}
+  macarons: {calories: 300, protein_g: 5, carbohydrates_g: 42, fat_g: 13}
+  miso_soup: {calories: 90, protein_g: 6, carbohydrates_g: 9, fat_g: 3}
+  mussels: {calories: 300, protein_g: 24, carbohydrates_g: 11, fat_g: 17}
+  nachos: {calories: 590, protein_g: 17, carbohydrates_g: 55, fat_g: 34}
+  omelette: {calories: 320, protein_g: 20, carbohydrates_g: 3, fat_g: 25}
+  onion_rings: {calories: 410, protein_g: 5, carbohydrates_g: 48, fat_g: 22}
+  oysters: {calories: 150, protein_g: 16, carbohydrates_g: 8, fat_g: 6}
+  pad_thai: {calories: 520, protein_g: 22, carbohydrates_g: 65, fat_g: 19}
+  paella: {calories: 540, protein_g: 28, carbohydrates_g: 65, fat_g: 18}
+  pancakes: {calories: 430, protein_g: 11, carbohydrates_g: 56, fat_g: 17}
+  panna_cotta: {calories: 290, protein_g: 4, carbohydrates_g: 22, fat_g: 21}
+  peking_duck: {calories: 560, protein_g: 32, carbohydrates_g: 8, fat_g: 44}
+  pho: {calories: 450, protein_g: 25, carbohydrates_g: 55, fat_g: 14}
+  pork_chop: {calories: 420, protein_g: 36, carbohydrates_g: 4, fat_g: 29}
+  poutine: {calories: 620, protein_g: 17, carbohydrates_g: 60, fat_g: 35}
+  prime_rib: {calories: 600, protein_g: 38, carbohydrates_g: 2, fat_g: 48}
+  pulled_pork_sandwich: {calories: 540, protein_g: 30, carbohydrates_g: 44, fat_g: 26}
+  ramen: {calories: 550, protein_g: 24, carbohydrates_g: 68, fat_g: 20}
+  ravioli: {calories: 430, protein_g: 16, carbohydrates_g: 52, fat_g: 17}
+  red_velvet_cake: {calories: 380, protein_g: 5, carbohydrates_g: 50, fat_g: 18}
+  risotto: {calories: 440, protein_g: 11, carbohydrates_g: 60, fat_g: 16}
+  samosa: {calories: 260, protein_g: 5, carbohydrates_g: 30, fat_g: 13}
+  sashimi: {calories: 220, protein_g: 30, carbohydrates_g: 3, fat_g: 9}
+  scallops: {calories: 260, protein_g: 24, carbohydrates_g: 8, fat_g: 14}
+  seaweed_salad: {calories: 100, protein_g: 3, carbohydrates_g: 10, fat_g: 6}
+  shrimp_and_grits: {calories: 540, protein_g: 28, carbohydrates_g: 52, fat_g: 25}
+  spaghetti_bolognese: {calories: 560, protein_g: 27, carbohydrates_g: 66, fat_g: 20}
+  spaghetti_carbonara: {calories: 590, protein_g: 25, carbohydrates_g: 64, fat_g: 26}
+  spring_rolls: {calories: 250, protein_g: 6, carbohydrates_g: 30, fat_g: 11}
+  strawberry_shortcake: {calories: 320, protein_g: 5, carbohydrates_g: 45, fat_g: 14}
+  sushi: {calories: 350, protein_g: 16, carbohydrates_g: 52, fat_g: 8}
+  tacos: {calories: 380, protein_g: 18, carbohydrates_g: 38, fat_g: 18}
+  takoyaki: {calories: 340, protein_g: 12, carbohydrates_g: 36, fat_g: 16}
+  tiramisu: {calories: 400, protein_g: 7, carbohydrates_g: 38, fat_g: 26}
+  tuna_tartare: {calories: 210, protein_g: 24, carbohydrates_g: 4, fat_g: 11}

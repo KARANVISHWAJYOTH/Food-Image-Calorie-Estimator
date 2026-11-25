@@ -2,7 +2,14 @@
 
 > **AI-Powered Food Image Identification, Calorie Estimation & Macronutrient Regression System**  
 > *Author / Developer: Karan Vishwajyoth*  
-> *Last Updated: October 2026*
+> *Last Updated: November 2026*
+>
+> **Document status:** this report describes the implemented system, but
+> [README.md](README.md) and [ml/MODEL_CARD.md](ml/MODEL_CARD.md) are the
+> authoritative references. A checkpoint trained on 2026-11-17 is installed at
+> `backend/app/best_model.pth`: held-out validation top-1 **78.9%**, calorie MAE
+> **48.2 kcal** (nutrition targets are class-level proxies — see §2). The API
+> still returns `503` whenever the checkpoint is missing or fails validation.
 
 ---
 
@@ -47,26 +54,35 @@ Here is an honest, granular audit of the implementation status across all subsys
 | **Frontend** | Dashboard (`Dashboard.jsx`, `QuickStats.jsx`) | **100% Complete** | Personalized metrics, 4 top stat cards, daily calorie & protein progress bars, quick scan access. |
 | **Frontend** | Food Scanner UI (`FoodUploader.jsx`, `ScanningOverlay.jsx`) | **100% Complete** | Drag-and-drop zone, camera upload trigger, image format/size validation, animated neon laser scanning beam. |
 | **Frontend** | Analysis Breakdown (`Result.jsx`, `NutritionChart.jsx`) | **100% Complete** | Interactive Recharts donut chart for macro energy contribution, dynamic portion scaler slider, confetti on high confidence, JSON export, clipboard copy (Hook order audited). |
-| **Frontend** | Scan History (`History.jsx`, `HistoryContext.jsx`) | **100% Complete** | Grid/table views, live search, macro filter chips (High Protein, Low Calorie, etc.), sorting, modal drill-down, deletion, LocalStorage + backend sync. |
+| **Frontend** | Scan History (`History.jsx`, `HistoryContext.jsx`) | **100% Complete** | Grid/table views, live search, macro filter chips (High Protein, Low Calorie, etc.), sorting, modal drill-down, deletion, clear-all. History is persisted per user by the backend; no LocalStorage copy. |
 | **Frontend** | Profile & Goals (`Profile.jsx`) | **100% Complete** | Custom daily targets (Calories, Protein), dietary preference selector, password change, account summary with backend persistence. |
 | **Backend API** | FastAPI Service (`backend/app/main.py`) | **100% Complete** | Endpoints for `/api/health`, `/api/predict`, `/api/auth/*` (register, login, me, profile), and `/api/history` (GET, POST, DELETE), CORS enabled. |
 | **Backend API** | Database Layer (`backend/app/database.py`) | **100% Complete** | SQLite persistence layer with transactions, indexed tables for users and scan history, and zero-config deployment. |
-| **Backend API** | Real Authentication (`backend/app/auth.py`) | **100% Complete** | PBKDF2-HMAC-SHA256 password hashing (100,000 rounds) + RFC 7519 HMAC-SHA256 JWT tokens with bearer auth dependencies. |
+| **Backend API** | Real Authentication (`backend/app/auth.py`) | **100% Complete** | bcrypt password hashing via passlib + RFC 7519 HMAC-SHA256 JWT tokens, password change, and bearer auth dependencies. Production mode refuses to start without `SECRET_KEY`. |
 | **Backend API** | Schemas & Contracts (`schemas.py`) | **100% Complete** | Strict Pydantic v2 validation models for requests, auth payloads, health status, and full nutritional predictions. |
-| **Backend API** | Integration Tests (`backend/tests/test_api.py`) | **100% Complete** | Comprehensive test suite covering health check, registration, duplicate checks, login, JWT token verification, history CRUD, and image validation. |
-| **Backend API** | Inference Runner (`predictor.py`) | **100% Complete** | Torchvision pipeline transforms, tensor conversion, batching, inference timing, and safety error checks. |
+| **Backend API** | Integration Tests (`backend/tests/`) | **100% Complete** | 30 passing tests: health, registration validation, login, JWT verification, history isolation/duplicate-id/clear-all, upload validation and orphan cleanup, password change, 503 model gate, and checkpoint validation codes. |
+| **Backend API** | Inference Runner (`predictor.py`) | **100% Complete** | Torchvision pipeline transforms, tensor conversion, batching, inference timing, threadpool execution, and safety error checks. |
+| **Backend API** | Checkpoint Gate (`model_validation.py`) | **100% Complete** | Rejects missing class names, nutrition stats, validation metrics, class/output mismatches, and untrained BatchNorm statistics; surfaces codes through `/api/health` and 503 responses. |
 | **Backend API** | Neural Architecture (`model.py`) | **100% Complete** | `MultiTaskFoodCNN` with ResNet-50 backbone, shared latent bottleneck, classification head + dual continuous regression heads. |
-| **DevOps** | Containerization (`Dockerfile`, `docker-compose.yml`) | **100% Complete** | Multi-container setup orchestrating frontend (Nginx SPA) and backend (FastAPI Uvicorn) with one command. |
+| **DevOps** | Containerization (`Dockerfile`, `docker-compose.yml`) | **100% Complete** | Multi-container setup (nginx SPA + FastAPI) built and smoke-tested end to end on 2026-11-25: `/api/health` healthy with the checkpoint loaded, containerized login → predict → history verified through the nginx proxy. Backend image installs CPU-only PyTorch wheels (2.9 GB total, no unused CUDA stack). |
 | **ML Pipeline** | Data Ingestion (`download_food101.py`, `prepare_nutrition5k.py`) | **100% Complete** | Automated downloaders and formatters for Food-101 and Nutrition5k cafeteria datasets. |
 | **ML Pipeline** | Label Alignment (`align_labels.py`) | **100% Complete** | Fuzzy string matching with SequenceMatcher, threshold tuning, and manual overrides YAML. |
 | **ML Pipeline** | Splits & Dataset (`splits.py`, `food_dataset.py`) | **100% Complete** | Stratified split manifest generator (70/15/15), PyTorch `Dataset` with official Food-101 partitions. |
 | **ML Pipeline** | Multi-Task Training (`train.py`, `losses.py`) | **100% Complete** | Two-stage training regime (frozen feature extraction followed by partial backbone unfreezing), AMP mixed precision, checkpointing. |
 | **ML Pipeline** | Evaluation Suite (`ml/evaluation/evaluate.py`) | **100% Complete** | Computes Top-1/Top-5 accuracy, macro F1, MAE, RMSE, Pearson $r$, $R^2$ score per nutrient, with automated JSON & Markdown export. |
-| **ML Pipeline** | Quantization & Optimization (`ml/inference/export_and_quantize.py`) | **100% Complete** | Dynamic INT8 quantization, TorchScript tracing, ONNX export, and CPU latency benchmarking. |
-| **ML Pipeline** | Hyperparameter Sweeps (`sweep_loss_weights.py`) | **100% Complete** | Grid search over $\lambda_{\text{cls}}$ and $\lambda_{\text{reg}}$ balancing classification accuracy vs regression MAE. |
+| **ML Pipeline** | Quantization & Optimization (`ml/inference/export_and_quantize.py`, `ml/optimization/`) | **100% Complete** | Dynamic INT8 quantization, L1 pruning (20/30/50%), TorchScript/ONNX export, and FP32 vs pruned vs INT8 latency + held-out accuracy benchmark (`ml/optimization/benchmark_results.md`). |
+| **ML Pipeline** | Hyperparameter Sweeps (`sweep_loss_weights.py`) | **Implemented, not executed** | Grid-search script over $\lambda_{\text{cls}}$ and $\lambda_{\text{reg}}$ is written and covered by tests, but no sweep run is recorded; `base.yaml` defaults ($\lambda_{\text{cls}}=\lambda_{\text{reg}}=1.0$) are used for the installed checkpoint. |
 | **ML Pipeline** | Jupyter Notebooks (`ml/notebooks/`) | **100% Complete** | 4 structured notebooks: environment check, data exploration, pipeline sanity checks, and loss weight analysis. |
 | **ML Pipeline** | Automated Unit Tests (`ml/tests/`) | **100% Complete** | Pytest suites verifying tensor shapes, losses, metrics, evaluation pipeline, and inference quantization. |
-| **Model Weights** | Trained `.pth` Checkpoint | **Pending Run** | Pipeline is ready; weights need to be trained via Google Colab T4 GPU (using `ml/training/RUN_INSTRUCTIONS.md`) and placed into backend. |
+| **Model Weights** | Trained `.pth` Checkpoint | **100% Complete** | Trained 2026-11-17 on the full Food-101 split (70,700 train / 15,150 val). Validation top-1 **78.9%**, calorie MAE **48.2 kcal**; checkpoint at `backend/app/best_model.pth` passes the validation gate. |
+
+> [!IMPORTANT]
+> The metrics above are the checkpoint's own held-out validation results.
+> Classification accuracy uses real per-image Food-101 labels, but nutrition
+> targets are **per-class constants** (7 classes from matched Nutrition5k dish
+> annotations, 94 documented per-serving estimates), so the regression MAE
+> measures agreement with those class priors rather than per-dish ground truth.
+> Quote only numbers that appear in `val_metrics` or an evaluation run.
 
 ---
 
@@ -107,6 +123,10 @@ Here is an honest, granular audit of the implementation status across all subsys
 
 ## 4. System Architecture & Data Flow
 
+A ready-to-present diagram is checked in at [`docs/architecture.svg`](docs/architecture.svg)
+(client, backend, model inference, and the offline ML pipeline on one canvas).
+The Mermaid diagrams below expand the request flow and the training pipeline.
+
 ### Application Workflow
 
 ```mermaid
@@ -136,7 +156,7 @@ flowchart TD
     FE -->|7. Dynamic Rendering| ResPage[Result Page]
     ResPage --> Chart[Recharts Donut Chart]
     ResPage --> Scaler[Dynamic Portion Scaler 0.5x - 2.0x]
-    ResPage --> HistCtx[History Context / LocalStorage Sync]
+    ResPage --> HistCtx[History Context / Backend Sync]
 ```
 
 ### ML Pipeline Data Flow
@@ -178,7 +198,7 @@ c:\Users\KARAN\Food Image Calorie Estimator\
 │   │   ├── model.py                      # MultiTaskFoodCNN PyTorch model architecture
 │   │   ├── predictor.py                  # Image loader, transforms, and inference execution engine
 │   │   ├── database.py                   # SQLite persistence layer for users and scan history
-│   │   ├── auth.py                       # PBKDF2 password hashing & RFC 7519 JWT auth handling
+│   │   ├── auth.py                       # bcrypt password hashing & RFC 7519 JWT auth handling
 │   │   └── schemas.py                    # Pydantic data validation contracts (Prediction, Auth, History)
 │   └── tests/                            # API integration tests
 │       └── test_api.py                   # Automated tests for Health, Auth, History CRUD & validation
@@ -218,7 +238,7 @@ c:\Users\KARAN\Food Image Calorie Estimator\
 │       │
 │       ├── context/                      # Global state management via React Context
 │       │   ├── AuthContext.jsx           # User authentication, demo session, and profile updater
-│       │   └── HistoryContext.jsx        # Scan history state, LocalStorage sync, and analytics aggregator
+│       │   └── HistoryContext.jsx        # Scan history state (backend-synced) and analytics aggregator
 │       │
 │       ├── pages/                        # Route page views
 │       │   ├── Home.jsx                  # Marketing landing page with hero, tech stack, and workflow
@@ -314,7 +334,7 @@ If the image is blurry, poorly lit, or depicts an unrecognized dish (confidence 
 - Avoid blurry overhead angles.
 
 ### 6. Scan History & Search Workstation
-- Preserves every analysis in both `LocalStorage` and the FastAPI backend memory.
+- Persists every analysis in the FastAPI backend database, scoped to the signed-in user.
 - Allows switching between **Grid View** (visual cards) and **Table View** (dense list).
 - Live search by dish name or dietary tag.
 - Category filters: *All Dishes*, *High Protein ($\ge 25\text{g}$)*, *Low Calorie ($\le 450\text{ kcal}$)*, *High Calorie ($\ge 650\text{ kcal}$)*.
@@ -340,12 +360,64 @@ $$\mathcal{L}_{\text{total}} = \lambda_{\text{cls}} \mathcal{L}_{\text{cls}}(\ha
 Where:
 - $\mathcal{L}_{\text{cls}}$ is Cross-Entropy Loss with optional label smoothing.
 - $\mathcal{L}_{\text{reg}}$ is Smooth L1 Loss (Huber Loss) to remain robust against outlier nutrition values.
-- $\lambda_{\text{cls}}$ and $\lambda_{\text{reg}}$ are hyperparameters tuned via `sweep_loss_weights.py`.
+- $\lambda_{\text{cls}}$ and $\lambda_{\text{reg}}$ are swept by `sweep_loss_weights.py`; no sweep has been completed in this repository yet, so the defaults in `ml/configs/base.yaml` are used.
 
 ### Two-Stage Training Regime (`train.py`)
 To prevent the random initialization of the regression and classification heads from destroying pretrained ImageNet weights:
 1. **Stage 1 (Feature Extraction)**: The ResNet-50 backbone is completely frozen (`requires_grad = False`). Only the shared dense layer and the task heads are trained for 2 epochs with learning rate $\eta = 10^{-3}$.
 2. **Stage 2 (Fine-Tuning)**: The top residual block of the backbone is unfrozen. The entire model is fine-tuned for 8 epochs with a reduced learning rate $\eta = 10^{-4}$ and automatic mixed precision (`torch.cuda.amp.autocast`).
+
+### Measured Training Run (2026-11-17)
+The installed checkpoint was trained on the full Food-101 split (70,700 train /
+15,150 validation images, seed 42) with CLI overrides for a short run: 1 frozen
+epoch at lr $10^{-3}$, then 3 fine-tuning epochs at lr $10^{-4}$ with cosine decay,
+batch 32, and AMP.
+
+```bash
+.venv/Scripts/python.exe -m ml.training.train --device cuda --epochs 4 \
+  --freeze-backbone-epochs 1 --batch-size 32 --num-workers 4 \
+  --scheduler cosine --checkpoint-dir ml/training/checkpoints
+cp ml/training/checkpoints/best.pt backend/app/best_model.pth
+```
+
+| Metric | Validation (trained) | Test (held out) |
+| --- | --- | --- |
+| Top-1 accuracy | 78.86% | 78.86% |
+| Top-5 accuracy | — | 93.92% |
+| Calories MAE | 48.18 kcal | 48.44 kcal |
+| Protein / carbs / fat MAE | 3.99 / 7.75 / 3.29 g | 3.99 / 7.87 / 3.35 g |
+
+The classification figures use real per-image Food-101 labels. Nutrition
+targets are per-class constants (7 classes from matched Nutrition5k dish
+annotations, 94 curated per-serving estimates), so the regression rows measure
+how closely the model reproduced those class priors — not per-dish laboratory
+truth. Test artifacts and the per-class breakdown are in
+`ml/evaluation/results/`.
+
+### Optimization & Benchmark Results (2026-11-25)
+
+All variants were derived from the installed checkpoint:
+`prune.py --checkpoint backend/app/best_model.pth --fine-tune-batches 300
+--learning-rate 5e-5`, `quantize.py --checkpoint backend/app/best_model.pth`,
+then `benchmark.py --max-test-samples 1500`. Accuracy is measured on 1,504
+held-out test images drawn with a fixed shuffle; latency is 100 runs after 15
+warmups on the benchmark host.
+
+| Variant | Size | CPU mean | GPU mean | Top-1 | Top-5 | Calorie MAE |
+| --- | --- | --- | --- | --- | --- | --- |
+| FP32 baseline | 96.17 MB | 44.81 ms | 8.29 ms | 77.93% | 94.41% | 48.99 kcal |
+| Pruned 20% | 96.19 MB | 47.20 ms | 8.74 ms | 76.20% | 93.02% | 49.80 kcal |
+| Pruned 30% | 96.19 MB | 44.10 ms | 8.59 ms | 75.93% | 92.75% | 50.56 kcal |
+| Pruned 50% | 96.19 MB | 45.71 ms | 9.04 ms | 75.07% | 92.49% | 51.61 kcal |
+| Dynamic INT8 | 91.65 MB | 45.39 ms | N/A | 79.52% | 94.48% | 47.94 kcal |
+
+L1 pruning is unstructured, so tensors stay dense: file size and dense-kernel
+latency are essentially unchanged while accuracy drops ~1.7–2.9 points at
+20–50% sparsity. Dynamic INT8 only converts the Linear head (convolutions, the
+bulk of ResNet-50 FLOPs, stay FP32), giving a 4.7% size reduction with no
+meaningful latency change; its 79.5% top-1 is within sampling noise of FP32.
+The full generated report is `ml/optimization/benchmark_results.md`
+(CSV alongside it).
 
 ---
 
@@ -357,63 +429,100 @@ The FastAPI backend runs on port `8000` by default. Interactive OpenAPI Swagger 
 
 #### 1. System Health Check
 - **Route**: `GET /api/health`
-- **Description**: Returns operational status, loaded device (CPU/CUDA), and model status.
-- **Response**:
+- **Description**: Returns operational status, device, checkpoint path, and the
+  checkpoint validation report. If the configured checkpoint is invalid,
+  `modelReady` is `false` and `POST /api/predict` returns `503`.
+- **Response** (measured on 2026-11-17, trained checkpoint, GPU host; fields
+  abbreviated where noted):
 ```json
 {
   "status": "healthy",
   "modelLoaded": true,
+  "modelReady": true,
   "modelArchitecture": "MultiTaskFoodCNN (ResNet50 Backbone + Calorie/Macro Regression)",
+  "modelVariant": "fp32",
   "device": "cuda",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "checkpointPath": "...\\backend\\app\\best_model.pth",
+  "trainedMetrics": {
+    "loss": 0.9438,
+    "accuracy": 0.7886,
+    "calories_mae": 48.18,
+    "protein_mae": 3.99,
+    "carbohydrates_mae": 7.75,
+    "fat_mae": 3.29
+  },
+  "modelValidation": {
+    "valid": true,
+    "errors": [],
+    "warnings": [],
+    "num_classes": 101
+  }
 }
 ```
 
 #### 2. Food Image Prediction
 - **Route**: `POST /api/predict`
+- **Auth**: Bearer JWT
 - **Content-Type**: `multipart/form-data`
-- **Form Field**: `image` (JPEG, PNG, or WEBP binary, max 15MB)
-- **Response Schema**:
+- **Form Field**: `image` (decodable JPEG, PNG, or WEBP; max 15 MB, max 8000 px per side)
+- **Otherwise**: `503` when no valid checkpoint is installed; `400` for decode/format violations.
+- **Response Schema** (measured response for a Food-101 pizza image on
+  2026-11-17; inference time is the first, cold request — warm requests measured
+  ~46 ms):
 ```json
 {
-  "id": "pred_8fa21b9c",
-  "foodClass": "Grilled Chicken Rice Bowl",
-  "category": "Main Course",
-  "confidenceScore": 0.947,
-  "confidencePercentage": 94.7,
-  "estimatedCalories": 650.0,
-  "protein": 38.0,
-  "carbohydrates": 72.0,
-  "fat": 19.0,
-  "fiber": 5.2,
-  "servingSize": "1 bowl (approx. 420g)",
+  "id": "pred_18a0c3a242",
+  "foodClass": "Pizza",
+  "category": "Fast Food",
+  "confidenceScore": 1.0,
+  "confidencePercentage": 100.0,
+  "estimatedCalories": 437.0,
+  "protein": 29.6,
+  "carbohydrates": 37.2,
+  "fat": 20.9,
+  "fiber": 3.7,
+  "servingSize": "1 standard serving (class-average estimate)",
   "isLowConfidence": false,
-  "healthRating": "High Protein & Balanced",
-  "dietaryTags": ["High Protein", "Lean Meat"],
-  "healthTips": "Excellent lean protein source combined with complex carbohydrates.",
-  "inferenceTimeMs": 42.5
+  "healthRating": "High Protein",
+  "dietaryTags": ["High Protein"],
+  "healthTips": "pizza is estimated at 437 kcal for one standard serving (29.6g protein, 37.2g carbs, 20.9g fat).",
+  "inferenceTimeMs": 398.2,
+  "imageUrl": "/uploads/0b605bbf729a4fbcb045d102b3f2387d.jpg"
 }
 ```
 
 #### 3. History Management
-- `GET /api/history?limit=20`: Fetches list of stored prediction records.
-- `POST /api/history`: Appends a new prediction record to the history collection.
-- `DELETE /api/history/{item_id}`: Removes a prediction by its ID.
+- `GET /api/history?limit=20&offset=0`: Lists records for the authenticated user.
+- `POST /api/history`: Saves a prediction; the server assigns the id.
+- `DELETE /api/history/{item_id}`: Deletes one record owned by the caller.
+- `DELETE /api/history`: Clears all records for the caller.
+
+#### 4. Authentication
+- `POST /api/auth/register`, `POST /api/auth/login`: Return a JWT and user profile.
+- `GET /api/auth/me`, `PUT /api/auth/profile`: Read and update name/goals.
+- `POST /api/auth/change-password`: Verifies the current password and returns a new JWT.
+- `POST /api/auth/logout`: Acknowledges client-side token disposal.
 
 ---
 
 ## 9. How to Run & Deploy
 
 ### Method 1: Instant Multi-Container Docker Deployment (Recommended)
-Make sure Docker Desktop is running, then execute from the project root:
+Make sure Docker Desktop is running, create a `.env` with a real `SECRET_KEY`
+(`openssl rand -hex 32`), then execute from the project root:
 
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
-- **Frontend**: Access at `http://localhost:3000`
+- **Frontend**: Access at `http://localhost:3000` (nginx proxies `/api` and `/uploads`)
 - **Backend API**: Access at `http://localhost:8000`
 - **Interactive Swagger Docs**: Access at `http://localhost:8000/docs`
+
+Compose runs with `APP_ENV=production` and refuses to start without
+`SECRET_KEY`. Demo seeding is disabled by default; set `SEED_DEMO=true` to
+enable the demo account.
 
 ---
 
@@ -468,9 +577,10 @@ For users who wish to train the neural network from scratch using a free Google 
 
 ## 10. Roadmap & Future Enhancements
 
-- [ ] **Trained Weights Checkpoint Release**: Complete the full 10-epoch training sweep on Google Colab and commit the production weights artifact (`best_model.pth`).
-- [ ] **Database Persistence**: Migrate in-memory history storage to PostgreSQL with SQLAlchemy or MongoDB Atlas.
-- [ ] **JWT User Authentication**: Upgrade the mock auth session to cryptographic JSON Web Tokens (JWT) with password hashing (bcrypt).
+- [x] **Trained Weights Installed**: 4-epoch run on the full Food-101 split (78.9% top-1, 48.2 kcal calorie MAE) shipped at `backend/app/best_model.pth` and passing the checkpoint gate. A longer 10-epoch schedule (`num_epochs` in `base.yaml`) remains an optional accuracy improvement, not a blocker.
+- [ ] **Loss-Weight Sweep Execution**: Run `sweep_loss_weights.py` on GPU and record the selected $\lambda$ pair; the current checkpoint uses the defaults.
+- [x] **Database Persistence**: SQLAlchemy 2.0 persistence with SQLite by default and PostgreSQL via `DATABASE_URL`; Alembic migration environment included.
+- [x] **JWT User Authentication**: bcrypt password hashing, JWT bearer auth, password change, and logout acknowledgement.
 - [ ] **Mobile Progressive Web App (PWA)**: Implement service workers and manifest files for native-like home screen installation on iOS and Android.
 - [ ] **Volumetric Depth Estimation**: Integrate LiDAR / ARKit depth maps to estimate food volume in cubic centimeters before calculating caloric density.
 - [ ] **Barcode Scanning Integration**: Combine visual CNN recognition with OpenFoodFacts barcode scanning for packaged foods.
