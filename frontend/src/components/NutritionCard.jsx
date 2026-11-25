@@ -5,11 +5,14 @@ export default function NutritionCard({
   type = 'calories',
   value = 0,
   unit = 'kcal',
-  dailyGoal = 2000,
+  dailyGoal = null,
   portionMultiplier = 1,
 }) {
   const adjustedValue = Math.round(Number(value) * portionMultiplier * 10) / 10;
-  const percentage = Math.min(100, Math.round((adjustedValue / dailyGoal) * 100));
+  const hasGoal = Number(dailyGoal) > 0;
+  const percentage = hasGoal
+    ? Math.min(100, Math.round((adjustedValue / dailyGoal) * 100))
+    : null;
 
   const configs = {
     calories: {
@@ -71,9 +74,11 @@ export default function NutritionCard({
             </div>
             <span className="text-sm font-bold text-slate-700">{config.label}</span>
           </div>
-          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${config.badgeBg}`}>
-            {percentage}% DV
-          </span>
+          {hasGoal && (
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${config.badgeBg}`}>
+              {percentage}% of goal
+            </span>
+          )}
         </div>
 
         <div className="flex items-baseline gap-1.5 my-2">
@@ -84,20 +89,22 @@ export default function NutritionCard({
         </div>
       </div>
 
-      <div className="mt-3">
-        <div className="flex justify-between text-[11px] font-semibold text-slate-400 mb-1.5">
-          <span>Daily Allowance</span>
-          <span>
-            {adjustedValue} / {dailyGoal} {config.unitLabel}
-          </span>
+      {hasGoal && (
+        <div className="mt-3">
+          <div className="flex justify-between text-[11px] font-semibold text-slate-400 mb-1.5">
+            <span>Daily target</span>
+            <span>
+              {adjustedValue} / {dailyGoal} {config.unitLabel}
+            </span>
+          </div>
+          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${config.barColor}`}
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
         </div>
-        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${config.barColor}`}
-            style={{ width: `${percentage}%` }}
-          />
-        </div>
-      </div>
+      )}
     </div>
   );
 }

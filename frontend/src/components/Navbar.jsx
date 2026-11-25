@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sparkles, Activity, ShieldCheck, Menu, X, ArrowRight, LayoutDashboard, LogIn } from 'lucide-react';
+import { Sparkles, Menu, X, ArrowRight, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated } = useAuth();
   const location = useLocation();
 
   const isCurrent = (path) => location.pathname === path;
@@ -15,21 +15,21 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo & Brand */}
-          <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-700 to-brand-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20 group-hover:scale-105 transition-transform duration-200">
+          <Link to="/" className="flex items-center gap-3 group min-w-0">
+            <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-gradient-to-tr from-brand-700 to-brand-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20 group-hover:scale-105 transition-transform duration-200">
               <Sparkles className="w-5 h-5 text-white animate-pulse" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-xl font-extrabold tracking-tight text-slate-900 font-sans">
+                <span className="text-lg sm:text-xl font-extrabold tracking-tight text-slate-900 font-sans">
                   NutriVision<span className="text-brand-600">.AI</span>
                 </span>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200/60">
+                <span className="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 border border-brand-200/60">
                   PyTorch
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium hidden sm:block">
-                AI Food & Calorie Estimator
+                Food & Calorie Estimator
               </p>
             </div>
           </Link>
@@ -107,7 +107,7 @@ export default function Navbar() {
 
       {/* Mobile Drawer */}
       {mobileOpen && (
-        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-6 space-y-3">
+        <div className="md:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-6 space-y-3 max-h-[calc(100vh-4rem)] overflow-y-auto">
           <Link
             to="/"
             onClick={() => setMobileOpen(false)}

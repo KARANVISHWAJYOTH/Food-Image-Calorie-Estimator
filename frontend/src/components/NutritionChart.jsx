@@ -1,6 +1,6 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { PieChart as PieIcon, Info } from 'lucide-react';
+import { PieChart as PieIcon } from 'lucide-react';
 
 export default function NutritionChart({ protein = 0, carbs = 0, fat = 0, portionMultiplier = 1 }) {
   const p = (Number(protein) || 0) * portionMultiplier;

@@ -3,18 +3,14 @@ import { Link } from 'react-router-dom';
 import {
   Sparkles,
   ArrowRight,
-  ShieldCheck,
   Flame,
   Beef,
   Wheat,
   Droplet,
   Zap,
   Cpu,
-  Layers,
   BarChart3,
   CheckCircle2,
-  ScanLine,
-  Image as ImageIcon,
   ChevronRight
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
@@ -24,26 +20,26 @@ import DisclaimerBanner from '../components/DisclaimerBanner';
 export default function Home() {
   const features = [
     {
-      title: 'AI Food Recognition',
-      desc: 'Identify food from uploaded images using a Multi-task CNN trained on thousands of global cuisine images.',
+      title: 'Food Recognition',
+      desc: 'Identify food from uploaded images with a multi-task ResNet-50 model trained on Food-101 classes.',
       icon: Cpu,
       color: 'bg-emerald-50 text-emerald-600 border-emerald-100',
     },
     {
       title: 'Calorie Estimation',
-      desc: 'Get an accurate estimated calorie value (kcal) computed through deep visual feature regression.',
+      desc: 'Get an estimated calorie value (kcal) from the model’s regression head.',
       icon: Flame,
       color: 'bg-amber-50 text-amber-600 border-amber-100',
     },
     {
       title: 'Nutrition Breakdown',
-      desc: 'View comprehensive estimated protein, carbohydrates, and fat breakdown with % daily value gauges.',
+      desc: 'See estimated protein, carbohydrates, fat, and derived fiber for each analyzed meal.',
       icon: BarChart3,
       color: 'bg-cyan-50 text-cyan-600 border-cyan-100',
     },
     {
-      title: 'Fast AI Analysis',
-      desc: 'Upload an image and receive complete multi-task predictions in under 50ms via our high-speed API.',
+      title: 'Single-Pass Analysis',
+      desc: 'One image produces a class prediction and four nutrition outputs in a single inference pass.',
       icon: Zap,
       color: 'bg-purple-50 text-purple-600 border-purple-100',
     },
@@ -58,23 +54,23 @@ export default function Home() {
     {
       num: '02',
       title: 'Image Preprocessing',
-      desc: 'The image is normalized, resized, and tensor-transformed for optimal neural network inference.',
+      desc: 'The photo is resized, normalized, and converted to a tensor before it reaches the model.',
     },
     {
       num: '03',
-      title: 'Multi-Task AI Analysis',
-      desc: 'PyTorch deep CNN backbone extracts visual latent vectors for simultaneous classification & macro regression.',
+      title: 'Model Inference',
+      desc: 'A ResNet-50 backbone produces a class prediction and four nutrient values in one forward pass.',
     },
     {
       num: '04',
       title: 'Nutrition Report',
-      desc: 'View calories, macronutrient donut breakdown, micronutrients, confidence scores, and dietary tips.',
+      desc: 'View calories, the macronutrient breakdown, confidence score, and dietary tips.',
     },
   ];
 
   const technologies = [
     { name: 'Python 3.11+', role: 'Backend Runtime', badge: 'Core' },
-    { name: 'PyTorch', role: 'Deep Learning Engine', badge: 'AI Model' },
+    { name: 'PyTorch', role: 'Deep Learning Engine', badge: 'Model' },
     { name: 'Torchvision', role: 'Transform Pipeline', badge: 'CV' },
     { name: 'FastAPI', role: 'High-Performance REST API', badge: 'API' },
     { name: 'React.js', role: 'Interactive Frontend SPA', badge: 'UI' },
@@ -96,10 +92,10 @@ export default function Home() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
             {/* Left Hero Text */}
             <div className="lg:col-span-7 space-y-6 text-center lg:text-left">
-              {/* PyTorch AI Badge */}
+              {/* Model badge */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-50 border border-brand-200/80 text-brand-800 text-xs font-bold shadow-sm animate-pulse-subtle">
                 <Sparkles className="w-4 h-4 text-brand-600" />
-                <span>Powered by PyTorch AI & Multi-Task CNN</span>
+                <span>ResNet-50 · PyTorch · Food-101</span>
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.12]">
@@ -110,7 +106,7 @@ export default function Home() {
               </h1>
 
               <p className="text-lg sm:text-xl text-slate-600 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal">
-                Upload a photo of your food and let AI identify it, estimate calories, and break down its nutrition in seconds.
+                Upload a photo of your food to get an estimated dish name, calorie count, and macronutrient breakdown.
               </p>
 
               {/* Action Buttons */}
@@ -136,15 +132,15 @@ export default function Home() {
               <div className="pt-6 border-t border-slate-200/70 flex flex-wrap items-center justify-center lg:justify-start gap-6 text-xs text-slate-500 font-semibold">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>94.7% Average Accuracy</span>
+                  <span>Multi-Task CNN</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Multi-Task Regression</span>
+                  <span>4 Nutrition Outputs</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>USDA Ground Truth</span>
+                  <span>Food-101 Class Set</span>
                 </div>
               </div>
             </div>
@@ -160,8 +156,8 @@ export default function Home() {
                     alt="Grilled Chicken Rice Bowl"
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
-                  {/* AI Scanning Beam Overlay */}
-                  <ScanningOverlay isScanning={true} label="Multi-Task CNN • Segmenting" />
+                  {/* Scanner overlay */}
+                  <ScanningOverlay isScanning={true} label="Processing image" />
                 </div>
 
                 {/* Identification Banner Under Image */}
@@ -170,17 +166,16 @@ export default function Home() {
                     <h3 className="text-base font-extrabold text-slate-900">
                       Grilled Chicken Rice Bowl
                     </h3>
-                    <p className="text-xs text-slate-500">1 standard bowl (approx. 420g)</p>
+                    <p className="text-xs text-slate-500">Illustrative preview — not a model output</p>
                   </div>
-                  <div className="px-2.5 py-1 rounded-xl bg-brand-50 border border-brand-200 text-brand-700 text-xs font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>94.7%</span>
+                  <div className="px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold">
+                    Example
                   </div>
                 </div>
 
                 {/* Floating Nutrition Cards */}
                 {/* Floating Card: Calories */}
-                <div className="absolute -top-5 -left-6 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-amber-200/80 flex items-center gap-3 animate-float-slow z-30">
+                <div className="absolute -top-4 -left-2 sm:-top-5 sm:-left-6 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-amber-200/80 flex items-center gap-3 animate-float-slow z-30">
                   <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                     <Flame className="w-5 h-5 fill-amber-500" />
                   </div>
@@ -191,7 +186,7 @@ export default function Home() {
                 </div>
 
                 {/* Floating Card: Protein */}
-                <div className="absolute -bottom-5 -left-4 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-cyan-200/80 flex items-center gap-3 animate-float-reverse z-30">
+                <div className="absolute -bottom-4 -left-2 sm:-bottom-5 sm:-left-4 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-cyan-200/80 flex items-center gap-3 animate-float-reverse z-30">
                   <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center">
                     <Beef className="w-5 h-5 text-cyan-600" />
                   </div>
@@ -202,7 +197,7 @@ export default function Home() {
                 </div>
 
                 {/* Floating Card: Carbs */}
-                <div className="absolute top-1/3 -right-6 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-emerald-200/80 flex items-center gap-3 animate-float-slow z-30">
+                <div className="absolute top-1/3 -right-2 sm:-right-6 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-emerald-200/80 flex items-center gap-3 animate-float-slow z-30">
                   <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                     <Wheat className="w-5 h-5 text-emerald-600" />
                   </div>
@@ -213,7 +208,7 @@ export default function Home() {
                 </div>
 
                 {/* Floating Card: Fat */}
-                <div className="absolute -bottom-4 -right-4 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-rose-200/80 flex items-center gap-3 animate-float-reverse z-30">
+                <div className="absolute -bottom-4 -right-2 sm:-bottom-4 sm:-right-4 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-card border border-rose-200/80 flex items-center gap-3 animate-float-reverse z-30">
                   <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
                     <Droplet className="w-5 h-5 text-rose-600" />
                   </div>
@@ -236,10 +231,10 @@ export default function Home() {
               Core Capabilities
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              Smarter Nutrition Through Deep Learning
+              What the App Does
             </h2>
             <p className="text-slate-500 text-sm sm:text-base">
-              Harness multi-task convolutional neural networks designed to simultaneously classify meals and predict continuous macro density.
+              A ResNet-50 model classifies the dish and regresses calories, protein, carbohydrates, and fat from a single photo.
             </p>
           </div>
 
@@ -283,10 +278,10 @@ export default function Home() {
               Visual Pipeline
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              How NutriVision AI Works
+              How NutriVision Works
             </h2>
             <p className="text-slate-500 text-sm sm:text-base">
-              From raw image pixel tensors to calibrated nutritional intelligence in 4 automated steps.
+              Four steps from an uploaded photo to a nutrition report.
             </p>
           </div>
 
@@ -300,8 +295,8 @@ export default function Home() {
                   <span className="text-3xl font-black text-brand-500/80 font-mono">
                     {step.num}
                   </span>
-                  <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-bold">
-                    ✓
+                  <div className="w-8 h-8 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center">
+                    <CheckCircle2 className="w-4 h-4" />
                   </div>
                 </div>
                 <h3 className="text-base font-bold text-slate-900 mb-2">
@@ -320,7 +315,7 @@ export default function Home() {
             <ArrowRight className="w-4 h-4 text-slate-300" />
             <span className="text-brand-600 font-extrabold">02 Preprocess</span>
             <ArrowRight className="w-4 h-4 text-slate-300" />
-            <span className="text-brand-600 font-extrabold">03 AI Analysis</span>
+            <span className="text-brand-600 font-extrabold">03 Model Inference</span>
             <ArrowRight className="w-4 h-4 text-slate-300" />
             <span className="text-brand-600 font-extrabold">04 Nutrition Report</span>
           </div>
@@ -335,7 +330,7 @@ export default function Home() {
               Tech Stack
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
-              Enterprise AI & Full-Stack Architecture
+              Full-Stack Architecture
             </h2>
             <p className="text-slate-500 text-sm sm:text-base">
               Built using cutting-edge deep learning, asynchronous API microservices, and reactive frontend architecture.
@@ -376,7 +371,7 @@ export default function Home() {
           </h2>
 
           <p className="text-slate-300 text-base sm:text-lg max-w-xl mx-auto leading-relaxed">
-            Upload your meal image and see the instant breakdown of calories, protein, carbohydrates, and fat.
+            Upload your meal image to see the estimated calories, protein, carbohydrates, and fat.
           </p>
 
           <div className="pt-2">
@@ -406,7 +401,7 @@ export default function Home() {
                 </span>
               </div>
               <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
-                Turn your food photo into nutrition insights. Advanced deep learning platform providing instantaneous calorie and macronutrient regression from single food images.
+                Turn your food photo into an estimated nutrition breakdown — calories, protein, carbohydrates, and fat from a single image.
               </p>
             </div>
 
@@ -438,8 +433,8 @@ export default function Home() {
           <DisclaimerBanner />
 
           <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-4">
-            <p>© 2026 NutriVision AI. All rights reserved.</p>
-            <p>Built with PyTorch Multi-Task Deep Learning & FastAPI</p>
+            <p>© 2026 NutriVision. All rights reserved.</p>
+            <p>Built with PyTorch, FastAPI, and React</p>
           </div>
         </div>
       </footer>

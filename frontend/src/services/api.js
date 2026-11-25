@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+// Relative by default so the Vite dev proxy (local) and nginx proxy (Docker
+// and production) can serve the API from the same origin.
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -81,8 +83,9 @@ export const predictFood = async (fileOrBlob) => {
     });
   } catch (error) {
     if (!error.response) {
+      const target = API_BASE_URL || 'this origin';
       throw new Error(
-        `Cannot connect to the backend at ${API_BASE_URL}. Start the FastAPI service on port 8000 and retry.`
+        `Cannot connect to the backend at ${target}. Start the FastAPI service and retry.`
       );
     }
     throw error;
@@ -92,65 +95,46 @@ export const predictFood = async (fileOrBlob) => {
 };
 
 /**
+ * Resolve a backend-relative asset path (e.g. /uploads/x.jpg) to a usable URL.
+ */
+export const resolveAssetUrl = (path) => {
+  if (!path) return '';
+  if (/^(https?:|data:|blob:)/i.test(path)) return path;
+  return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+};
+
+/**
  * Fetch past prediction history for current authenticated user
  */
-export const getPredictionHistory = async () => {
-  try {
-    const response = await apiClient.get('/api/history');
-    return response.data?.history || [];
-  } catch (error) {
-    if (error.response?.status === 401) {
-      throw error;
-    }
-    const local = localStorage.getItem('nutrivision_history');
-    if (local) {
-      try {
-        return JSON.parse(local);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [];
-  }
+export const getPredictionHistory = async (limit = 50, offset = 0) => {
+  const response = await apiClient.get('/api/history', {
+    params: { limit, offset },
+  });
+  return response.data?.history || [];
 };
 
 /**
  * Save new prediction to history
  */
 export const savePrediction = async (prediction) => {
-  try {
-    const response = await apiClient.post('/api/history', prediction);
-    return response.data;
-  } catch (error) {
-    if (error.response?.status === 401) {
-      throw error;
-    }
-    const local = localStorage.getItem('nutrivision_history');
-    let historyList = local ? JSON.parse(local) : [];
-    historyList = [prediction, ...historyList];
-    localStorage.setItem('nutrivision_history', JSON.stringify(historyList));
-    return { status: 'saved_locally', item: prediction };
-  }
+  const response = await apiClient.post('/api/history', prediction);
+  return response.data;
 };
 
 /**
  * Delete a prediction item from history
  */
 export const deletePrediction = async (id) => {
-  try {
-    const response = await apiClient.delete(`/api/history/${id}`);
-    return response.data;
-  } catch (error) {
-    if (error.response?.status === 401) {
-      throw error;
-    }
-    const local = localStorage.getItem('nutrivision_history');
-    if (local) {
-      const historyList = JSON.parse(local).filter((item) => item.id !== id);
-      localStorage.setItem('nutrivision_history', JSON.stringify(historyList));
-    }
-    return { status: 'deleted_locally', id };
-  }
+  const response = await apiClient.delete(`/api/history/${id}`);
+  return response.data;
+};
+
+/**
+ * Delete every history record for the current authenticated user
+ */
+export const clearPredictionHistory = async () => {
+  const response = await apiClient.delete('/api/history');
+  return response.data;
 };
 
 /**
@@ -164,11 +148,7 @@ export const loginUser = async (email, password) => {
     }
     return {
       success: true,
-      user: {
-        ...response.data.user,
-        dailyCalorieGoal: response.data.user.dailyCalorieGoal || 2000,
-        dailyProteinGoal: response.data.user.dailyProteinGoal || 120,
-      },
+      user: response.data.user,
       token: response.data.token,
     };
   } catch (error) {
@@ -210,6 +190,30 @@ export const updateUserProfileApi = async (updates) => {
   } catch (error) {
     const msg = error.response?.data?.detail || error.message || 'Profile update failed';
     throw new Error(msg);
+  }
+};
+
+export const changePasswordApi = async (currentPassword, newPassword) => {
+  try {
+    const response = await apiClient.post('/api/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    if (response.data?.token) {
+      localStorage.setItem('nutrivision_token', response.data.token);
+    }
+    return response.data;
+  } catch (error) {
+    const msg = error.response?.data?.detail || error.message || 'Password change failed';
+    throw new Error(msg);
+  }
+};
+
+export const logoutUserApi = async () => {
+  try {
+    await apiClient.post('/api/auth/logout');
+  } catch (_error) {
+    // Stateless JWT logout: local token removal is what actually ends the session.
   }
 };
 

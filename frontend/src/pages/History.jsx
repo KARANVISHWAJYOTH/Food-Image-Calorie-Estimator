@@ -6,22 +6,17 @@ import ConfidenceBadge from '../components/ConfidenceBadge';
 import DisclaimerBanner from '../components/DisclaimerBanner';
 import Toast from '../components/Toast';
 import { useHistory } from '../context/HistoryContext';
+import { resolveAssetUrl } from '../services/api';
 import {
   Search,
   Filter,
   ArrowUpDown,
   Trash2,
   ExternalLink,
-  Flame,
-  Beef,
-  Wheat,
-  Droplet,
   Calendar,
   Grid,
   List,
-  Eye,
-  X,
-  Sparkles
+  Eye
 } from 'lucide-react';
 
 export default function HistoryPage() {
@@ -77,26 +72,39 @@ export default function HistoryPage() {
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
-    await deleteHistoryItem(id);
-    setToastMsg('Record removed from history');
-  };
-
-  const formatDate = (isoString) => {
     try {
-      const d = new Date(isoString);
-      return new Intl.DateTimeFormat('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: 'numeric',
-      }).format(d);
-    } catch (e) {
-      return 'Recently';
+      await deleteHistoryItem(id);
+      setToastMsg('Record removed from history');
+    } catch (error) {
+      setToastMsg(error.response?.data?.detail || 'Could not delete this record. Please retry.');
     }
   };
 
+  const handleClearHistory = async () => {
+    if (!confirm('Delete every saved analysis for your account? This cannot be undone.')) {
+      return;
+    }
+    try {
+      const result = await clearHistory();
+      setToastMsg(`Analysis history cleared (${result.deleted} records).`);
+    } catch (error) {
+      setToastMsg(error.response?.data?.detail || 'Could not clear history. Please retry.');
+    }
+  };
+
+  const formatDate = (isoString) => {
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) return 'Date unavailable';
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+    }).format(date);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50/60 flex">
+    <div className="min-h-screen bg-slate-50/60 flex flex-col">
       <Sidebar />
 
       <main className="flex-1 lg:pl-72 flex flex-col min-w-0">
@@ -186,12 +194,7 @@ export default function HistoryPage() {
               </span>
               {history.length > 0 && (
                 <button
-                  onClick={() => {
-                    if (confirm('Are you sure you want to clear your local analysis history?')) {
-                      clearHistory();
-                      setToastMsg('Analysis history cleared.');
-                    }
-                  }}
+                  onClick={handleClearHistory}
                   className="text-slate-400 hover:text-rose-600 transition-colors"
                 >
                   Clear History
@@ -224,7 +227,7 @@ export default function HistoryPage() {
                     {/* Food Thumbnail */}
                     <div className="relative aspect-video w-full overflow-hidden bg-slate-100">
                       <img
-                        src={item.imageUrl}
+                        src={resolveAssetUrl(item.imageUrl)}
                         alt={item.foodClass}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         loading="lazy"
@@ -288,7 +291,7 @@ export default function HistoryPage() {
             /* Table View */
             <div className="bg-white rounded-3xl overflow-hidden border border-slate-200/80 shadow-soft">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full min-w-[760px] text-left text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="py-3.5 px-4">Dish</th>
@@ -311,7 +314,7 @@ export default function HistoryPage() {
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-3">
                             <img
-                              src={item.imageUrl}
+                              src={resolveAssetUrl(item.imageUrl)}
                               alt={item.foodClass}
                               className="w-10 h-10 rounded-xl object-cover border border-slate-200"
                             />

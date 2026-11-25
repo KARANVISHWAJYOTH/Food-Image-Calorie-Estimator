@@ -1,7 +1,7 @@
 import React from 'react';
-import { Sparkles, Cpu } from 'lucide-react';
+import { Cpu } from 'lucide-react';
 
-export default function ScanningOverlay({ isScanning = true, label = 'AI Neural Feature Extractor' }) {
+export default function ScanningOverlay({ isScanning = true, label = 'Processing image' }) {
   if (!isScanning) return null;
 
   return (
@@ -24,18 +24,10 @@ export default function ScanningOverlay({ isScanning = true, label = 'AI Neural 
         <div className="absolute w-2 h-2 rounded-full bg-brand-400 animate-ping" />
       </div>
 
-      {/* Real-time AI Tracking Pill */}
+      {/* Status pill */}
       <div className="absolute top-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md border border-brand-500/40 text-white text-xs font-semibold shadow-lg">
         <Cpu className="w-3.5 h-3.5 text-brand-400 animate-spin" style={{ animationDuration: '3s' }} />
         <span className="tracking-wide">{label}</span>
-      </div>
-
-      {/* Dynamic Bounding Box simulation */}
-      <div className="absolute top-[28%] left-[22%] w-[56%] h-[48%] border border-brand-400/70 rounded-xl bg-brand-500/10">
-        <div className="absolute -top-3 left-2 px-2 py-0.5 rounded bg-brand-600 text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-sm">
-          <Sparkles className="w-2.5 h-2.5" />
-          <span>Food Segment • 98.4%</span>
-        </div>
       </div>
     </div>
   );

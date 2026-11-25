@@ -34,7 +34,7 @@ export default function Toast({ message, type = 'success', onClose, duration = 3
   const Icon = config.icon;
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 animate-bounce-in max-w-sm">
+    <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:bottom-6 sm:right-6 z-50 animate-bounce-in sm:max-w-sm">
       <div
         className={`flex items-center gap-3 px-4 py-3 rounded-2xl shadow-elevated border ${config.bg} backdrop-blur-md`}
       >

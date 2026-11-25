@@ -1,8 +1,20 @@
 import React from 'react';
-import { ShieldCheck, AlertTriangle, Sparkles, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, AlertTriangle, Sparkles } from 'lucide-react';
 
-export default function ConfidenceBadge({ score = 0.94, percentage = null, size = 'normal' }) {
-  const pct = percentage !== null ? percentage : Math.round(score * 1000) / 10;
+export default function ConfidenceBadge({ score = null, percentage = null, size = 'normal' }) {
+  const rawPct = percentage !== null
+    ? percentage
+    : (typeof score === 'number' ? score * 100 : null);
+
+  if (rawPct === null || Number.isNaN(rawPct)) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border bg-slate-50 text-slate-500 border-slate-200">
+        Confidence N/A
+      </span>
+    );
+  }
+
+  const pct = Math.round(rawPct * 10) / 10;
 
   let colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200/80';
   let Icon = ShieldCheck;

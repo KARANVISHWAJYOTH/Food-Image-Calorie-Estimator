@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Cpu, CheckCircle2, Loader2, Scan } from 'lucide-react';
+import { Cpu, CheckCircle2, Loader2 } from 'lucide-react';
 
-export default function LoadingState({ message = 'AI is analyzing your food…' }) {
+export default function LoadingState({ message = 'Analyzing your image…' }) {
   const [step, setStep] = useState(0);
 
   const steps = [
-    'Image preprocessing & normalization',
-    'Extracting deep CNN representations (ResNet50)',
-    'Multi-task classification & calorie regression',
-    'Calibrating macronutrient breakdown',
+    'Resizing and normalising the image',
+    'Running the ResNet-50 model',
+    'Scoring the predicted food class',
+    'Reading the nutrition outputs',
   ];
 
   useEffect(() => {
@@ -20,7 +20,6 @@ export default function LoadingState({ message = 'AI is analyzing your food…' 
 
   return (
     <div className="bg-white rounded-3xl p-8 sm:p-12 border border-slate-200/80 shadow-card text-center max-w-xl mx-auto space-y-8">
-      {/* Animated AI Core Icon */}
       <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
         <div className="absolute inset-0 rounded-full bg-brand-500/20 animate-ping" />
         <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-glow-brand z-10">
@@ -33,7 +32,7 @@ export default function LoadingState({ message = 'AI is analyzing your food…' 
           <span>{message}</span>
         </h3>
         <p className="text-sm text-slate-500 font-medium max-w-sm mx-auto">
-          NutriVision AI multi-task network is segmenting food pixels and computing energy density.
+          The photo is being classified and its calorie and macronutrient outputs computed.
         </p>
       </div>
 

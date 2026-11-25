@@ -1,69 +1,58 @@
 import React from 'react';
-import { Utensils, Flame, Beef, Zap, TrendingUp } from 'lucide-react';
+import { Utensils, Flame, Beef, Zap } from 'lucide-react';
 import { useHistory } from '../context/HistoryContext';
 
 export default function QuickStats() {
   const { getStats } = useHistory();
   const stats = getStats();
+  const hasData = stats.totalMeals > 0;
 
   const cards = [
     {
       title: 'Total Meals Analyzed',
-      value: stats.totalMeals || 0,
+      value: stats.totalMeals,
       unit: 'meals',
-      trend: '+12% this month',
-      trendPositive: true,
+      detail: `${stats.thisWeekCount} in the last 7 days`,
       icon: Utensils,
-      color: 'brand',
       bgLight: 'bg-emerald-50',
       textColor: 'text-emerald-600',
-      borderColor: 'border-emerald-100',
     },
     {
       title: 'Average Calories',
-      value: stats.avgCalories || 0,
+      value: stats.avgCalories,
       unit: 'kcal / meal',
-      trend: 'Target: 600-750 kcal',
-      trendPositive: true,
+      detail: 'Per saved scan',
       icon: Flame,
-      color: 'amber',
       bgLight: 'bg-amber-50',
       textColor: 'text-amber-600',
-      borderColor: 'border-amber-100',
     },
     {
       title: 'Average Protein',
-      value: stats.avgProtein || 0,
+      value: stats.avgProtein,
       unit: 'g / meal',
-      trend: 'High Protein Ratio',
-      trendPositive: true,
+      detail: 'Per saved scan',
       icon: Beef,
-      color: 'cyan',
       bgLight: 'bg-cyan-50',
       textColor: 'text-cyan-600',
-      borderColor: 'border-cyan-100',
     },
     {
       title: 'Analyses This Week',
-      value: stats.thisWeekCount || 0,
+      value: stats.thisWeekCount,
       unit: 'scans',
-      trend: 'Active tracking',
-      trendPositive: true,
+      detail: 'Last 7 days',
       icon: Zap,
-      color: 'purple',
       bgLight: 'bg-purple-50',
       textColor: 'text-purple-600',
-      borderColor: 'border-purple-100',
     },
   ];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-      {cards.map((card, idx) => {
+      {cards.map((card) => {
         const Icon = card.icon;
         return (
           <div
-            key={idx}
+            key={card.title}
             className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-soft hover:shadow-card transition-all duration-200 group"
           >
             <div className="flex items-center justify-between mb-3">
@@ -82,9 +71,8 @@ export default function QuickStats() {
               <span className="text-xs font-semibold text-slate-500">{card.unit}</span>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 pt-2 border-t border-slate-100">
-              <TrendingUp className="w-3.5 h-3.5 text-brand-600" />
-              <span>{card.trend}</span>
+            <div className="text-xs font-medium text-slate-500 pt-2 border-t border-slate-100">
+              {hasData ? card.detail : 'No saved scans yet'}
             </div>
           </div>
         );

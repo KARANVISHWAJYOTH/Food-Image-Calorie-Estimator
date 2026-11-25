@@ -135,7 +135,7 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
               Drop your food image here
             </h3>
             <p className="text-sm text-slate-500 max-w-md mb-6 leading-relaxed">
-              Upload any meal photo. NutriVision AI will segment the dish, classify ingredients, and estimate calories & macros.
+              Upload any meal photo. The model classifies the dish and estimates calories and macronutrients from the image.
             </p>
 
             <div className="flex flex-wrap items-center justify-center gap-3">
@@ -165,9 +165,9 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
           /* Preview state */
           <div className="space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
-                <FileCheck2 className="w-4 h-4 text-brand-600" />
-                <span>
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-900 min-w-0">
+                <FileCheck2 className="w-4 h-4 text-brand-600 flex-shrink-0" />
+                <span className="truncate">
                   {selectedFile?.name || 'Uploaded Food Photo'}
                 </span>
               </div>
@@ -189,15 +189,15 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
                 alt="Selected Food Preview"
                 className="w-full h-full object-cover"
               />
-              {/* Active laser scan simulation */}
-              <ScanningOverlay isScanning={isLoading} label={isLoading ? 'Extracting Deep CNN Features...' : 'Ready for AI Inference'} />
+              {/* Scanner overlay */}
+              <ScanningOverlay isScanning={isLoading} label={isLoading ? 'Running model inference…' : 'Ready to analyze'} />
             </div>
 
             {/* Action Bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
               <div className="text-xs text-slate-500 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Multi-Task PyTorch Model Loaded • ResNet50 Backbone</span>
+                <span className="w-2 h-2 rounded-full bg-slate-400" />
+                <span>ResNet-50 classification and regression heads</span>
               </div>
 
               <button
@@ -209,12 +209,12 @@ export default function FoodUploader({ onAnalyze, isLoading = false }) {
                 {isLoading ? (
                   <>
                     <Sparkles className="w-5 h-5 animate-spin" />
-                    <span>AI is analyzing your food…</span>
+                    <span>Analyzing your food…</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-5 h-5" />
-                    <span>Analyze Food Nutrition</span>
+                    <span>Analyze Food</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}

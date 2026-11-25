@@ -4,6 +4,7 @@ import {
   registerUser as apiRegister,
   fetchCurrentUser,
   updateUserProfileApi,
+  logoutUserApi,
 } from '../services/api';
 import Toast from '../components/Toast';
 
@@ -24,18 +25,28 @@ export const AuthProvider = ({ children }) => {
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(
+    () => Boolean(localStorage.getItem('nutrivision_token'))
+  );
   const [toastMsg, setToastMsg] = useState(null);
 
   const logout = useCallback(() => {
+    const hadToken = Boolean(localStorage.getItem('nutrivision_token'));
     setUser(null);
     localStorage.removeItem('nutrivision_user');
     localStorage.removeItem('nutrivision_token');
+    if (hadToken) {
+      logoutUserApi();
+    }
   }, []);
 
   // Check backend session validity on initial app mount if token exists
   useEffect(() => {
     const token = localStorage.getItem('nutrivision_token');
-    if (!token) return;
+    if (!token) {
+      setIsInitializing(false);
+      return;
+    }
 
     let isMounted = true;
     fetchCurrentUser()
@@ -49,6 +60,9 @@ export const AuthProvider = ({ children }) => {
         if (err.response?.status === 401) {
           logout();
         }
+      })
+      .finally(() => {
+        if (isMounted) setIsInitializing(false);
       });
 
     return () => {
@@ -149,6 +163,7 @@ export const AuthProvider = ({ children }) => {
         user,
         isAuthenticated: !!user,
         isLoading,
+        isInitializing,
         login,
         loginDemo,
         register,

@@ -7,17 +7,19 @@ import FoodUploader from '../components/FoodUploader';
 import LoadingState from '../components/LoadingState';
 import DisclaimerBanner from '../components/DisclaimerBanner';
 import { useHistory } from '../context/HistoryContext';
-import { predictFood } from '../services/api';
-import { Flame, Beef, ArrowRight, History, Sparkles } from 'lucide-react';
+import { predictFood, resolveAssetUrl } from '../services/api';
+import { Flame, ArrowRight, History, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const { history, setActiveResult, addHistoryItem } = useHistory();
   const navigate = useNavigate();
 
   const handleAnalyze = async ({ file, previewUrl }) => {
     setIsLoading(true);
+    setError(null);
     try {
       const res = await predictFood(file);
       if (res.success) {
@@ -26,11 +28,20 @@ export default function Dashboard() {
           imageUrl: previewUrl || res.data.imageUrl,
         };
         setActiveResult(resultData);
-        await addHistoryItem(resultData);
+        try {
+          await addHistoryItem(resultData);
+        } catch (saveError) {
+          console.warn('Prediction succeeded but history save failed:', saveError);
+        }
         navigate('/result');
       }
     } catch (err) {
       console.error('Analysis error:', err);
+      setError(
+        err.response?.data?.detail
+          || err.message
+          || 'The model could not analyze this image. Make sure the backend and trained model are available.',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -39,7 +50,7 @@ export default function Dashboard() {
   const recentHistory = history.slice(0, 3);
 
   return (
-    <div className="min-h-screen bg-slate-50/60 flex">
+    <div className="min-h-screen bg-slate-50/60 flex flex-col">
       {/* Navigation Sidebar */}
       <Sidebar />
 
@@ -52,12 +63,12 @@ export default function Dashboard() {
             showAction={false}
           />
 
-          {/* Quick Statistics (4 Cards) */}
+          {/* Summary cards */}
           <QuickStats />
 
           {/* Analysis Workspace or Loader */}
           {isLoading ? (
-            <LoadingState message="AI is analyzing your food…" />
+            <LoadingState message="Analyzing your food…" />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* Main Upload Card */}
@@ -66,13 +77,18 @@ export default function Dashboard() {
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                       <Sparkles className="w-5 h-5 text-brand-600" />
-                      <span>Instant Food Calorie Scanner</span>
+                      <span>Scan a Meal</span>
                     </h2>
                     <span className="text-xs font-semibold text-slate-400">
-                      Multi-Task Vision Model
+                      ResNet-50 model
                     </span>
                   </div>
                   <FoodUploader onAnalyze={handleAnalyze} isLoading={isLoading} />
+                  {error && (
+                    <div className="mt-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
+                      {error}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -105,7 +121,7 @@ export default function Dashboard() {
                           className="flex items-center gap-3 p-2.5 rounded-2xl hover:bg-slate-50 border border-transparent hover:border-slate-200/60 cursor-pointer transition-all group"
                         >
                           <img
-                            src={item.imageUrl}
+                            src={resolveAssetUrl(item.imageUrl)}
                             alt={item.foodClass}
                             className="w-12 h-12 rounded-xl object-cover border border-slate-200 group-hover:scale-105 transition-transform"
                           />
@@ -133,25 +149,26 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* AI Nutrition Insight Card */}
+                {/* Model info card */}
                 <div className="bg-gradient-to-br from-brand-900 to-slate-900 text-white rounded-3xl p-6 shadow-card space-y-3 relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-brand-400/20 rounded-full blur-2xl pointer-events-none" />
                   <div className="flex items-center gap-2 text-brand-300 text-xs font-bold uppercase tracking-wider">
                     <Sparkles className="w-4 h-4" />
-                    <span>Nutrition Intelligence</span>
+                    <span>Model Info</span>
                   </div>
                   <h4 className="text-base font-extrabold tracking-tight">
-                    Calorie Density Estimation
+                    How the Estimate Is Made
                   </h4>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    NutriVision AI computes volumetric calorie estimates by combining spatial feature segmentation with deep regression networks.
+                    A ResNet-50 backbone feeds one classification head (Food-101 classes) and one regression head that predicts
+                    calories, protein, carbohydrates, and fat in a single forward pass.
                   </p>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Medical / AI Disclaimer */}
+          {/* Disclaimer */}
           <DisclaimerBanner />
         </div>
       </main>

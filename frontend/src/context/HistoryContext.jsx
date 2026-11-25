@@ -1,67 +1,102 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { getPredictionHistory, savePrediction, deletePrediction as apiDeletePrediction } from '../services/api';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  getPredictionHistory,
+  savePrediction,
+  deletePrediction as apiDeletePrediction,
+  clearPredictionHistory,
+} from '../services/api';
+import { useAuth } from './AuthContext';
 
 const HistoryContext = createContext(null);
 
 export const HistoryProvider = ({ children }) => {
-  const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('nutrivision_history');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [];
-  });
-
+  const { user, isInitializing } = useAuth();
+  const [history, setHistory] = useState([]);
   const [activeResult, setActiveResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
+  const refreshHistory = useCallback(async (limit = 50, offset = 0) => {
+    if (!localStorage.getItem('nutrivision_token')) {
+      setHistory([]);
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const items = await getPredictionHistory(limit, offset);
+      setHistory(Array.isArray(items) ? items : []);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Reload history whenever the authenticated user changes (login/logout).
   useEffect(() => {
-    localStorage.setItem('nutrivision_history', JSON.stringify(history));
-  }, [history]);
+    if (isInitializing) return;
+    if (!user) {
+      setHistory([]);
+      setActiveResult(null);
+      return;
+    }
+    refreshHistory().catch(() => setHistory([]));
+  }, [user, isInitializing, refreshHistory]);
 
   const addHistoryItem = async (item) => {
-    const newRecord = {
-      id: item.id || `hist_${Date.now()}`,
+    const tempId = `pending_${Date.now()}`;
+    const optimistic = {
+      id: tempId,
       foodClass: item.foodClass,
-      calories: item.estimatedCalories || item.calories,
+      calories: item.estimatedCalories ?? item.calories,
       protein: item.protein,
-      carbohydrates: item.carbohydrates || item.carbs,
+      carbohydrates: item.carbohydrates ?? item.carbs,
       fat: item.fat,
-      fiber: item.fiber || 0,
-      sugar: item.sugar || 0,
-      sodium: item.sodium || 0,
-      potassium: item.potassium || 0,
+      fiber: item.fiber ?? 0,
       confidenceScore: item.confidenceScore,
-      confidencePercentage: item.confidencePercentage || (item.confidenceScore * 100),
+      confidencePercentage: item.confidencePercentage ?? (item.confidenceScore * 100),
       imageUrl: item.imageUrl,
+      imagePath: item.imagePath,
       timestamp: item.timestamp || new Date().toISOString(),
-      portion: item.portion || 1.0,
+      portion: item.portion ?? 1.0,
       servingSize: item.servingSize,
       healthRating: item.healthRating,
       dietaryTags: item.dietaryTags || [],
-      ingredients: item.ingredients || [],
       healthTips: item.healthTips,
       isLowConfidence: item.isLowConfidence || false,
     };
 
-    setHistory((prev) => [newRecord, ...prev]);
-    await savePrediction(newRecord);
+    setHistory((prev) => [optimistic, ...prev]);
+    try {
+      const res = await savePrediction(optimistic);
+      if (res?.item) {
+        setHistory((prev) => prev.map((h) => (h.id === tempId ? res.item : h)));
+      }
+      return res?.item;
+    } catch (error) {
+      setHistory((prev) => prev.filter((h) => h.id !== tempId));
+      throw error;
+    }
   };
 
   const deleteHistoryItem = async (id) => {
+    const removed = history.find((item) => item.id === id);
     setHistory((prev) => prev.filter((item) => item.id !== id));
-    await apiDeletePrediction(id);
+    try {
+      await apiDeletePrediction(id);
+    } catch (error) {
+      if (removed) {
+        setHistory((prev) => [removed, ...prev]);
+      }
+      throw error;
+    }
   };
 
-  const clearHistory = () => {
+  const clearHistory = async () => {
+    const result = await clearPredictionHistory();
     setHistory([]);
-    localStorage.removeItem('nutrivision_history');
+    setActiveResult(null);
+    return result;
   };
 
-  // Quick statistics calculator
   const getStats = () => {
     if (!history.length) {
       return {
@@ -90,8 +125,8 @@ export const HistoryProvider = ({ children }) => {
       totalMeals,
       avgCalories: Math.round(totalCalories / totalMeals),
       avgProtein: Math.round((totalProtein / totalMeals) * 10) / 10,
-      thisWeekCount: thisWeekCount || totalMeals,
-      todayCalories: todayCalories || Math.round(totalCalories / totalMeals),
+      thisWeekCount,
+      todayCalories,
     };
   };
 
@@ -99,11 +134,13 @@ export const HistoryProvider = ({ children }) => {
     <HistoryContext.Provider
       value={{
         history,
+        isLoading,
         activeResult,
         setActiveResult,
         addHistoryItem,
         deleteHistoryItem,
         clearHistory,
+        refreshHistory,
         getStats,
       }}
     >

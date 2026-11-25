@@ -8,22 +8,33 @@ import {
   LogOut,
   Sparkles,
   ChevronRight,
-  Activity,
   Menu,
   X,
-  Flame,
-  CheckCircle2,
-  AlertCircle
+  Flame
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useHistory } from '../context/HistoryContext';
 import { checkApiHealth } from '../services/api';
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
+  const { getStats } = useHistory();
+  const stats = getStats();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState({ checked: false, isLive: false });
+
+  const calorieGoal = user?.dailyCalorieGoal || 0;
+  const calorieProgress = calorieGoal > 0
+    ? Math.min(100, Math.round((stats.todayCalories / calorieGoal) * 100))
+    : 0;
+  const initials = (user?.name || user?.email || '?')
+    .split(/[\s@._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
 
   useEffect(() => {
     let isMounted = true;
@@ -50,7 +61,7 @@ export default function Sidebar() {
       name: 'Analyze Food',
       path: '/analyze',
       icon: ScanLine,
-      badge: 'AI Model',
+      badge: 'Model',
     },
     {
       name: 'History',
@@ -95,7 +106,7 @@ export default function Sidebar() {
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-white border-r border-slate-200/90 flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 max-w-[85vw] bg-white border-r border-slate-200/90 flex flex-col justify-between transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -112,7 +123,7 @@ export default function Sidebar() {
                     NutriVision<span className="text-brand-600">.AI</span>
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-400 font-medium">PyTorch Multi-Task CNN</p>
+                <p className="text-[11px] text-slate-400 font-medium">ResNet-50 · Food-101</p>
               </div>
             </div>
             {mobileOpen && (
@@ -164,23 +175,26 @@ export default function Sidebar() {
             })}
           </div>
 
-          {/* Quick Calorie Streak Box */}
+          {/* Today's calorie progress from saved scans */}
           <div className="mx-4 p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-md relative overflow-hidden">
             <div className="absolute -right-4 -bottom-4 w-20 h-20 bg-brand-500/20 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <Flame className="w-4 h-4 text-amber-400 fill-amber-400 animate-bounce" />
-                Daily Streak
+                <Flame className="w-4 h-4 text-amber-400" />
+                Today
               </span>
               <span className="text-xs font-bold text-brand-400 bg-brand-950/60 px-2 py-0.5 rounded-full border border-brand-500/30">
-                5 Days
+                {stats.todayCalories} / {calorieGoal || '—'} kcal
               </span>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Target: <span className="text-white font-bold">{user?.dailyCalorieGoal || 2200} kcal</span>
+              {stats.totalMeals} saved {stats.totalMeals === 1 ? 'scan' : 'scans'} in your history
             </p>
             <div className="w-full bg-slate-700 h-2 rounded-full mt-2.5 overflow-hidden">
-              <div className="bg-gradient-to-r from-brand-400 to-emerald-400 h-full rounded-full w-3/4" />
+              <div
+                className="bg-gradient-to-r from-brand-400 to-emerald-400 h-full rounded-full transition-all"
+                style={{ width: `${calorieProgress}%` }}
+              />
             </div>
           </div>
         </div>
@@ -198,8 +212,8 @@ export default function Sidebar() {
                 </>
               ) : (
                 <>
-                  <span className="w-2 h-2 rounded-full bg-blue-500" />
-                  <span className="text-blue-700">AI Simulation</span>
+                  <span className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="text-rose-700">Backend Offline</span>
                 </>
               )}
             </div>
@@ -208,14 +222,12 @@ export default function Sidebar() {
           {/* User profile card & logout */}
           <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors">
             <div className="flex items-center gap-2.5 min-w-0">
-              <img
-                src={user?.avatarUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80'}
-                alt={user?.name || 'User'}
-                className="w-9 h-9 rounded-full object-cover border border-slate-200"
-              />
+              <div className="w-9 h-9 rounded-full bg-brand-600 text-white flex items-center justify-center text-xs font-extrabold border border-brand-200">
+                {initials || '?'}
+              </div>
               <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">{user?.name || 'Karan'}</p>
-                <p className="text-[11px] text-slate-400 truncate">{user?.email || 'karan@nutrivision.ai'}</p>
+                <p className="text-xs font-bold text-slate-900 truncate">{user?.name}</p>
+                <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
               </div>
             </div>
             <button

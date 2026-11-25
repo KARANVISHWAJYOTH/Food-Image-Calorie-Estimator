@@ -22,9 +22,12 @@ import LowConfidenceAlert from '../components/LowConfidenceAlert';
 import DisclaimerBanner from '../components/DisclaimerBanner';
 import Toast from '../components/Toast';
 import { useHistory } from '../context/HistoryContext';
+import { useAuth } from '../context/AuthContext';
+import { resolveAssetUrl } from '../services/api';
 
 export default function Result() {
   const { activeResult, addHistoryItem } = useHistory();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const result = activeResult;
@@ -50,7 +53,7 @@ export default function Result() {
           origin: { y: 0.6 },
           colors: ['#10b981', '#34d399', '#059669', '#f59e0b'],
         });
-      } catch (_e) {}
+      } catch {}
     }
   }, [result]);
 
@@ -59,27 +62,31 @@ export default function Result() {
   const isLowConfidence = result.isLowConfidence || result.confidenceScore < 0.65;
 
   const handleSave = async () => {
-    await addHistoryItem({
-      ...result,
-      portion,
-      calories: Math.round(result.estimatedCalories * portion),
-      protein: Math.round(result.protein * portion * 10) / 10,
-      carbohydrates: Math.round(result.carbohydrates * portion * 10) / 10,
-      fat: Math.round(result.fat * portion * 10) / 10,
-    });
-    setIsSaved(true);
-    setToastMsg('Result saved to your analysis history!');
+    try {
+      await addHistoryItem({
+        ...result,
+        portion,
+        calories: Math.round(result.estimatedCalories * portion),
+        protein: Math.round(result.protein * portion * 10) / 10,
+        carbohydrates: Math.round(result.carbohydrates * portion * 10) / 10,
+        fat: Math.round(result.fat * portion * 10) / 10,
+      });
+      setIsSaved(true);
+      setToastMsg('Result saved to your analysis history!');
+    } catch (error) {
+      setToastMsg(error.response?.data?.detail || 'Could not save this result. Please retry.');
+    }
   };
 
   const handleCopySummary = () => {
-    const text = `🥗 NutriVision AI Nutrition Report:
+    const text = `Nutrition estimate from NutriVision
 Food: ${result.foodClass} (${Math.round(result.confidenceScore * 100)}% confidence)
 Portion: ${portion}x (${result.servingSize || '1 serving'})
-• Energy: ${Math.round(result.estimatedCalories * portion)} kcal
-• Protein: ${Math.round(result.protein * portion * 10) / 10}g
-• Carbs: ${Math.round(result.carbohydrates * portion * 10) / 10}g
-• Fat: ${Math.round(result.fat * portion * 10) / 10}g
-Analyzed by NutriVision AI PyTorch Engine.`;
+- Energy: ${Math.round(result.estimatedCalories * portion)} kcal
+- Protein: ${Math.round(result.protein * portion * 10) / 10}g
+- Carbs: ${Math.round(result.carbohydrates * portion * 10) / 10}g
+- Fat: ${Math.round(result.fat * portion * 10) / 10}g
+Values are model estimates, not dietary advice.`;
 
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -111,7 +118,7 @@ Analyzed by NutriVision AI PyTorch Engine.`;
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/60 flex">
+    <div className="min-h-screen bg-slate-50/60 flex flex-col">
       <Sidebar />
 
       <main className="flex-1 lg:pl-72 flex flex-col min-w-0">
@@ -158,7 +165,7 @@ Analyzed by NutriVision AI PyTorch Engine.`;
             </div>
           </div>
 
-          {/* Low Confidence Warning Card (Requirement #5) */}
+          {/* Low-confidence warning */}
           {isLowConfidence && (
             <LowConfidenceAlert
               confidenceScore={result.confidenceScore}
@@ -172,7 +179,7 @@ Analyzed by NutriVision AI PyTorch Engine.`;
               {/* Food Image */}
               <div className="lg:col-span-5 relative aspect-square sm:aspect-video lg:aspect-square rounded-2xl overflow-hidden shadow-inner border border-slate-100">
                 <img
-                  src={result.imageUrl}
+                  src={resolveAssetUrl(result.imageUrl)}
                   alt={result.foodClass}
                   className="w-full h-full object-cover"
                 />
@@ -181,18 +188,18 @@ Analyzed by NutriVision AI PyTorch Engine.`;
                 </div>
               </div>
 
-              {/* Food Information & AI Tagging */}
+              {/* Food information */}
               <div className="lg:col-span-7 space-y-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-xs font-bold text-brand-600 uppercase tracking-wider">
                     <Sparkles className="w-4 h-4" />
                     <span>{result.category || 'Identified Dish'}</span>
                   </div>
-                  <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+                  <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight break-words">
                     {result.foodClass}
                   </h1>
                   <p className="text-xs sm:text-sm text-slate-500 font-medium">
-                    Serving: <strong className="text-slate-700">{result.servingSize || '1 standard serving (approx. 350g)'}</strong>
+                    Serving: <strong className="text-slate-700">{result.servingSize || '1 serving'}</strong>
                   </p>
                 </div>
 
@@ -210,12 +217,12 @@ Analyzed by NutriVision AI PyTorch Engine.`;
                   </div>
                 )}
 
-                {/* AI Health Tip */}
+                {/* Health tip */}
                 {result.healthTips && (
                   <div className="p-4 rounded-2xl bg-brand-50/70 border border-brand-200/70 text-brand-950 text-xs sm:text-sm leading-relaxed">
                     <p className="font-bold text-brand-800 mb-0.5 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-brand-600" />
-                      AI Nutritional Insight
+                      Nutritional Note
                     </p>
                     <p>{result.healthTips}</p>
                   </div>
@@ -231,7 +238,7 @@ Analyzed by NutriVision AI PyTorch Engine.`;
                     <span className="text-xs font-extrabold text-brand-600">{portion}x Portion</span>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[0.5, 1.0, 1.5, 2.0].map((val) => (
                       <button
                         key={val}
@@ -252,7 +259,7 @@ Analyzed by NutriVision AI PyTorch Engine.`;
             </div>
           </div>
 
-          {/* 4 Large Nutrition Summary Cards (Requirement #4) */}
+          {/* Nutrition summary cards */}
           <div className="space-y-3">
             <h2 className="text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
               <Flame className="w-5 h-5 text-amber-500" />
@@ -264,28 +271,26 @@ Analyzed by NutriVision AI PyTorch Engine.`;
                 type="calories"
                 value={result.estimatedCalories}
                 unit="kcal"
-                dailyGoal={2200}
+                dailyGoal={user?.dailyCalorieGoal || null}
                 portionMultiplier={portion}
               />
               <NutritionCard
                 type="protein"
                 value={result.protein}
                 unit="g"
-                dailyGoal={130}
+                dailyGoal={user?.dailyProteinGoal || null}
                 portionMultiplier={portion}
               />
               <NutritionCard
                 type="carbohydrates"
                 value={result.carbohydrates}
                 unit="g"
-                dailyGoal={240}
                 portionMultiplier={portion}
               />
               <NutritionCard
                 type="fat"
                 value={result.fat}
                 unit="g"
-                dailyGoal={65}
                 portionMultiplier={portion}
               />
             </div>
@@ -303,67 +308,32 @@ Analyzed by NutriVision AI PyTorch Engine.`;
               />
             </div>
 
-            {/* Micronutrients & Detected Ingredients */}
+            {/* Derived Fiber */}
             <div className="lg:col-span-5 space-y-6">
-              {/* Micronutrients Table */}
               <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-soft space-y-4">
                 <h3 className="text-sm font-extrabold text-slate-900 pb-2 border-b border-slate-100">
-                  Key Micronutrients & Minerals
+                  Additional Nutrition
                 </h3>
                 <div className="space-y-2.5 text-xs">
-                  <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-500 font-medium">Dietary Fiber</span>
+                  <div className="flex justify-between py-1">
+                    <span className="text-slate-500 font-medium">Dietary Fiber (derived)</span>
                     <span className="font-extrabold text-slate-800">
                       {Math.round((result.fiber || 0) * portion * 10) / 10} g
                     </span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-500 font-medium">Sugars</span>
-                    <span className="font-extrabold text-slate-800">
-                      {Math.round((result.sugar || 0) * portion * 10) / 10} g
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-slate-50">
-                    <span className="text-slate-500 font-medium">Sodium</span>
-                    <span className="font-extrabold text-slate-800">
-                      {Math.round((result.sodium || 0) * portion)} mg
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-slate-500 font-medium">Potassium</span>
-                    <span className="font-extrabold text-slate-800">
-                      {Math.round((result.potassium || 0) * portion)} mg
-                    </span>
-                  </div>
                 </div>
+                <p className="text-[11px] text-slate-400">
+                  Fiber is estimated from the predicted carbohydrate value; the model does not predict it directly.
+                </p>
               </div>
-
-              {/* Detected Ingredients */}
-              {result.ingredients && result.ingredients.length > 0 && (
-                <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-soft space-y-3">
-                  <h3 className="text-sm font-extrabold text-slate-900">
-                    Common Ingredients Detected
-                  </h3>
-                  <div className="flex flex-wrap gap-1.5">
-                    {result.ingredients.map((ing, i) => (
-                      <span
-                        key={i}
-                        className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/70 text-slate-700 text-xs font-medium"
-                      >
-                        {ing}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* AI Prediction Technical Diagnostics Box (Requirement #4) */}
+          {/* Prediction details */}
           <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-soft">
             <h3 className="text-sm font-extrabold text-slate-900 mb-4 flex items-center gap-2">
               <Cpu className="w-4 h-4 text-brand-600" />
-              <span>AI Prediction Diagnostics</span>
+              <span>Prediction Details</span>
             </h3>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
@@ -373,20 +343,26 @@ Analyzed by NutriVision AI PyTorch Engine.`;
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
                 <span className="text-slate-400 font-medium block">Confidence Score</span>
-                <span className="text-slate-900 font-bold mt-1 block">{Math.round(result.confidenceScore * 1000) / 10}%</span>
+                <span className="text-slate-900 font-bold mt-1 block">
+                  {typeof result.confidenceScore === 'number'
+                    ? `${Math.round(result.confidenceScore * 1000) / 10}%`
+                    : 'N/A'}
+                </span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
-                <span className="text-slate-400 font-medium block">Estimated Base Energy</span>
+                <span className="text-slate-400 font-medium block">Base Calories</span>
                 <span className="text-slate-900 font-bold mt-1 block">{result.estimatedCalories} kcal</span>
               </div>
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100">
                 <span className="text-slate-400 font-medium block">Inference Runtime</span>
-                <span className="text-slate-900 font-bold mt-1 block">{result.inferenceTimeMs || 45.0} ms</span>
+                <span className="text-slate-900 font-bold mt-1 block">
+                  {typeof result.inferenceTimeMs === 'number' ? `${result.inferenceTimeMs} ms` : 'N/A'}
+                </span>
               </div>
             </div>
           </div>
 
-          {/* Action Buttons Row (Requirement #4) */}
+          {/* Actions */}
           <div className="flex flex-wrap items-center justify-between gap-4 p-6 bg-white rounded-3xl border border-slate-200/80 shadow-soft">
             <div className="flex flex-wrap items-center gap-3">
               <Link
@@ -414,7 +390,7 @@ Analyzed by NutriVision AI PyTorch Engine.`;
             </Link>
           </div>
 
-          {/* ML Disclaimer (Requirement #4 & #11) */}
+          {/* Disclaimer */}
           <DisclaimerBanner />
         </div>
       </main>
