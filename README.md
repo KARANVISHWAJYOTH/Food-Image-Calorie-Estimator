@@ -70,6 +70,7 @@ ml/
   evaluation/              Top-1/5, F1, MAE/RMSE, Pearson r, R²
   inference/, optimization/ INT8 quantization, TorchScript/ONNX export, benchmarks
 docker-compose.yml         Backend + frontend (nginx) with healthchecks
+DEPLOYMENT.md              Hosting guide: VM + Compose, split frontend/API, TLS, backups
 docs/architecture.svg      System + inference architecture diagram
 ```
 
@@ -253,6 +254,10 @@ Compose runs the backend with `APP_ENV=production` and refuses to start without
 `SECRET_KEY`. Demo seeding defaults to off; `SEED_DEMO=true` in `.env` enables
 the demo account (the example file sets this for local evaluation). Data and
 uploads are stored in named volumes.
+
+For deploying to a real server (single VM, or frontend + API split across
+hosts), with TLS, backups, and verification steps, see
+[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Limitations
 

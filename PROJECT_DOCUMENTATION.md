@@ -29,13 +29,13 @@
 
 ## 1. Project Overview & Vision
 
-**NutriVision AI** is an end-to-end artificial intelligence application designed to automate dietary logging and nutritional tracking from raw food photographs. By combining computer vision with multi-task deep convolutional neural networks (CNNs), the application enables users to snap or upload a photo of any dish and instantly receive:
+**NutriVision AI** is an end-to-end food-image analysis application for logging approximate nutrition estimates. A user uploads a photo, and a multi-task CNN predicts one of 101 Food-101 classes plus four nutrition values. These nutrition values are class-level estimates, not precise per-image or portion measurements.
 
 - **Food Category Classification**: Recognizes the dish among 101 distinct culinary categories.
-- **Continuous Calorie Regression**: Accurately estimates energy content in kilocalories (`kcal`).
-- **Macronutrient Breakdown**: Simultaneously predicts core macronutrients—**Protein (g)**, **Carbohydrates (g)**, **Fat (g)**, and **Fiber (g)**.
-- **Portion Dynamics**: Real-time multiplier scaling (`0.5x`, `1.0x`, `1.5x`, `2.0x`) with dynamic recalculation of Daily Value percentages (`% DV`).
-- **Health Insights & Quality Guardrails**: Detects ambiguous or low-confidence captures (`< 65%`) and provides practical photographic feedback.
+- **Nutrition Estimates**: Predicts calories, protein, carbohydrates, and fat. Fiber is derived from predicted carbohydrates and the predicted food name; it is not a model output.
+- **Portion Display Control**: The result page lets a user scale displayed nutrition values using a portion multiplier. This is a UI calculation, not image-based portion detection.
+- **Confidence Feedback**: Shows the classifier's top-class confidence and a low-confidence warning with retake guidance.
+- **Personal Logging**: Saves results to a database-backed history isolated to each authenticated user.
 
 The repository is structured into two complementary ecosystems:
 1. **Full-Stack Application Layer**: A responsive modern React frontend coupled with an asynchronous Python FastAPI backend, fully containerized with Docker.
@@ -53,17 +53,17 @@ Here is an honest, granular audit of the implementation status across all subsys
 | **Frontend** | Authentication (`AuthContext`, `Login`, `Signup`) | **100% Complete** | Live backend JWT integration + 1-click **Demo Account Mode** with token interceptors and local storage state persistence. |
 | **Frontend** | Dashboard (`Dashboard.jsx`, `QuickStats.jsx`) | **100% Complete** | Personalized metrics, 4 top stat cards, daily calorie & protein progress bars, quick scan access. |
 | **Frontend** | Food Scanner UI (`FoodUploader.jsx`, `ScanningOverlay.jsx`) | **100% Complete** | Drag-and-drop zone, camera upload trigger, image format/size validation, animated neon laser scanning beam. |
-| **Frontend** | Analysis Breakdown (`Result.jsx`, `NutritionChart.jsx`) | **100% Complete** | Interactive Recharts donut chart for macro energy contribution, dynamic portion scaler slider, confetti on high confidence, JSON export, clipboard copy (Hook order audited). |
-| **Frontend** | Scan History (`History.jsx`, `HistoryContext.jsx`) | **100% Complete** | Grid/table views, live search, macro filter chips (High Protein, Low Calorie, etc.), sorting, modal drill-down, deletion, clear-all. History is persisted per user by the backend; no LocalStorage copy. |
-| **Frontend** | Profile & Goals (`Profile.jsx`) | **100% Complete** | Custom daily targets (Calories, Protein), dietary preference selector, password change, account summary with backend persistence. |
-| **Backend API** | FastAPI Service (`backend/app/main.py`) | **100% Complete** | Endpoints for `/api/health`, `/api/predict`, `/api/auth/*` (register, login, me, profile), and `/api/history` (GET, POST, DELETE), CORS enabled. |
-| **Backend API** | Database Layer (`backend/app/database.py`) | **100% Complete** | SQLite persistence layer with transactions, indexed tables for users and scan history, and zero-config deployment. |
+| **Frontend** | Analysis Breakdown (`Result.jsx`, `NutritionChart.jsx`) | Implemented | Nutrition cards, macro energy donut chart, adjustable display portion multiplier, confidence and dietary labels, copy and JSON export actions. |
+| **Frontend** | Scan History (`History.jsx`, `HistoryContext.jsx`) | Implemented | Grid/table views, search by food or tag, protein/calorie filters, date/calorie/protein sorting, detail view, delete-one and clear-all. History is persisted per user by the backend. |
+| **Frontend** | Profile & Goals (`Profile.jsx`) | Implemented | User profile, daily calorie/protein goals, and password change. |
+| **Backend API** | FastAPI Service (`backend/app/main.py`) | Implemented | Health, authenticated prediction, signup/register, login, current profile, profile update (`PATCH`), password change, logout acknowledgement, and user-scoped history endpoints. |
+| **Backend API** | Database Layer (`backend/app/database.py`) | Implemented | SQLAlchemy persistence with SQLite by default, PostgreSQL configurable through `DATABASE_URL`, and user-scoped prediction history. |
 | **Backend API** | Real Authentication (`backend/app/auth.py`) | **100% Complete** | bcrypt password hashing via passlib + RFC 7519 HMAC-SHA256 JWT tokens, password change, and bearer auth dependencies. Production mode refuses to start without `SECRET_KEY`. |
 | **Backend API** | Schemas & Contracts (`schemas.py`) | **100% Complete** | Strict Pydantic v2 validation models for requests, auth payloads, health status, and full nutritional predictions. |
-| **Backend API** | Integration Tests (`backend/tests/`) | **100% Complete** | 30 passing tests: health, registration validation, login, JWT verification, history isolation/duplicate-id/clear-all, upload validation and orphan cleanup, password change, 503 model gate, and checkpoint validation codes. |
+| **Backend API** | Integration Tests (`backend/tests/`) | Implemented | API tests cover health, authentication, user-isolated history, upload checks, password changes, model readiness, and checkpoint validation. Run the tests locally to confirm the current result. |
 | **Backend API** | Inference Runner (`predictor.py`) | **100% Complete** | Torchvision pipeline transforms, tensor conversion, batching, inference timing, threadpool execution, and safety error checks. |
 | **Backend API** | Checkpoint Gate (`model_validation.py`) | **100% Complete** | Rejects missing class names, nutrition stats, validation metrics, class/output mismatches, and untrained BatchNorm statistics; surfaces codes through `/api/health` and 503 responses. |
-| **Backend API** | Neural Architecture (`model.py`) | **100% Complete** | `MultiTaskFoodCNN` with ResNet-50 backbone, shared latent bottleneck, classification head + dual continuous regression heads. |
+| **Backend API** | Neural Architecture (`model.py`) | Implemented | `MultiTaskFoodCNN` with ResNet-50 backbone, a 101-class classification head, and one four-value regression head. |
 | **DevOps** | Containerization (`Dockerfile`, `docker-compose.yml`) | **100% Complete** | Multi-container setup (nginx SPA + FastAPI) built and smoke-tested end to end on 2026-11-25: `/api/health` healthy with the checkpoint loaded, containerized login → predict → history verified through the nginx proxy. Backend image installs CPU-only PyTorch wheels (2.9 GB total, no unused CUDA stack). |
 | **ML Pipeline** | Data Ingestion (`download_food101.py`, `prepare_nutrition5k.py`) | **100% Complete** | Automated downloaders and formatters for Food-101 and Nutrition5k cafeteria datasets. |
 | **ML Pipeline** | Label Alignment (`align_labels.py`) | **100% Complete** | Fuzzy string matching with SequenceMatcher, threshold tuning, and manual overrides YAML. |
@@ -88,36 +88,34 @@ Here is an honest, granular audit of the implementation status across all subsys
 
 ## 3. Technology Stack
 
-### 💻 Frontend Architecture
-- **Core Library**: [React 19](https://react.dev/) (Functional components, hooks, custom context)
-- **Build Tool & Bundler**: [Vite 8](https://vitejs.dev/) (Lightning-fast HMR and ESM bundling)
-- **Styling**: [Tailwind CSS v3.4](https://tailwindcss.com/) with custom typography, brand palette, and soft drop shadows
-- **Routing**: [React Router v7](https://reactrouter.com/) (Declarative client-side routing with `ProtectedRoute` guards)
-- **Data Visualization**: [Recharts v3](https://recharts.org/) (Interactive SVG Donut chart displaying caloric share of macros)
-- **Icons & UI FX**: [Lucide React](https://lucide.dev/) (Feather icon set) + [Canvas Confetti](https://www.npmjs.com/package/canvas-confetti)
-- **HTTP Client**: [Axios](https://axios-http.com/) with configured timeouts, interceptors, and error handling
-- **Code Quality**: [Oxlint](https://oxc-project.github.io/)
+### Frontend
+- **Runtime/UI**: React 19 with React DOM; functional components, hooks, and React Context.
+- **Build/dev server**: Vite 8 with the React plugin.
+- **Styling**: Tailwind CSS 3.4 and project CSS.
+- **Routing**: React Router 7 with protected routes and lazy-loaded pages.
+- **Charts and icons**: Recharts 3 and Lucide React; Canvas Confetti is used for result feedback.
+- **HTTP**: Axios, JWT request interceptor, 401 session-expiry handling, Vite development proxy.
+- **Linting**: Oxlint.
 
-### ⚙️ Backend API
-- **Framework**: [FastAPI 0.115](https://fastapi.tiangolo.com/) (High-performance ASGI Python framework)
-- **Server**: [Uvicorn 0.34](https://www.uvicorn.org/) (Standard async worker)
-- **Data Modeling & Validation**: [Pydantic v2](https://docs.pydantic.dev/)
-- **Image Processing**: [Pillow 11 (PIL)](https://python-pillow.org/)
-- **File Upload Handling**: `python-multipart`
+### Backend
+- **Language/runtime**: Python 3.11+ (recommended in the project README).
+- **API/server**: FastAPI 0.115 and Uvicorn.
+- **Validation**: Pydantic 2.
+- **Persistence**: SQLAlchemy 2, Alembic migration environment, SQLite by default, PostgreSQL supported through `DATABASE_URL`.
+- **Authentication**: `python-jose` JWT, passlib/bcrypt password hashing.
+- **Image and upload handling**: Pillow, `python-multipart`, static `/uploads` serving.
 
-### 🧠 Deep Learning & Machine Learning
-- **Framework**: [PyTorch 2.6](https://pytorch.org/) & [Torchvision 0.21](https://pytorch.org/vision/)
-- **Backbone CNNs**: ResNet-50 (`torchvision.models.resnet50`) and EfficientNet-B0
-- **Multi-Task Heads**:
-  - Head 1: Food Classification (101-class CrossEntropyLogits)
-  - Head 2: Caloric Regression (Single continuous scalar $\text{kcal}$)
-  - Head 3: Macronutrient Regression (4-dimensional vector: $[\text{protein}, \text{carbs}, \text{fat}, \text{fiber}]$)
-- **Data & Metrics**: Pandas, NumPy, Scikit-Learn, PyYAML, Tqdm, Matplotlib
-- **Testing**: Pytest
+### Machine learning
+- **Framework**: PyTorch and Torchvision (training requirements pin PyTorch 2.6.0 and Torchvision 0.21.0).
+- **Backbones**: ResNet-50 is used for the installed checkpoint; EfficientNet-B0 is supported by the model implementation.
+- **Outputs**: 101 class logits and four normalized values `[calories, protein, carbohydrates, fat]`. Fiber is estimated separately at inference.
+- **Data/tools**: Food-101, aligned Nutrition5k data, NumPy, Pandas, scikit-learn, PyYAML, tqdm, Matplotlib.
+- **Training/evaluation**: Pytest, two-stage training, checkpoint validation, evaluation and optimization scripts.
 
-### 🐳 DevOps & Deployment
-- **Docker**: Independent multi-stage Dockerfiles for frontend (Node build + Nginx Alpine) and backend (Python 3.11 slim)
-- **Docker Compose**: Single-command multi-container orchestration (`docker-compose.yml`)
+### Deployment
+- Docker and Docker Compose run the FastAPI backend and the frontend served by nginx.
+- nginx serves the single-page app and proxies `/api` and `/uploads`.
+- Compose uses health checks and named data/upload volumes. Production requires `SECRET_KEY`.
 
 ---
 
@@ -131,41 +129,35 @@ The Mermaid diagrams below expand the request flow and the training pipeline.
 
 ```mermaid
 flowchart TD
-    User([User / Client Browser]) -->|1. Takes photo / uploads image| FE[React + Vite Frontend]
-    FE -->|2. Laser scan animation & validation| ScanUI[Scanning Visualizer]
-    FE -->|3. POST multipart/form-data| API[FastAPI Backend /api/predict]
+    User([User]) -->|Sign up or log in| FE[React SPA]
+    FE -->|JWT-protected multipart image| API[FastAPI /api/predict]
+    FE -->|Read and update profile| Auth[FastAPI auth endpoints]
+    FE -->|Read and manage scans| History[FastAPI history endpoints]
     
-    subgraph Backend_Inference[Backend Inference Engine]
-        API -->|4. Parse bytes & PIL convert| Trans[Torchvision Image Transforms<br/>Resize 256 + CenterCrop 224 + Normalize]
-        Trans -->|5. Normalized Tensor| CNN[PyTorch MultiTaskFoodCNN]
-        
-        subgraph MultiTask_Network[MultiTaskFoodCNN Architecture]
-            CNN --> BB[ResNet-50 Backbone]
-            BB --> Bottleneck[Shared Dense Bottleneck<br/>512 Neurons + BatchNorm + ReLU + Dropout]
-            Bottleneck --> HeadCls[Classification Head<br/>Softmax over Food Classes]
-            Bottleneck --> HeadCal[Calorie Regression Head<br/>Scalar kcal Output]
-            Bottleneck --> HeadMacro[Macro Regression Head<br/>Protein, Carbs, Fat, Fiber]
-        end
-    end
-    
-    HeadCls --> OutputAgg[Prediction Aggregator & Confidence Scoring]
-    HeadCal --> OutputAgg
-    HeadMacro --> OutputAgg
-    OutputAgg -->|6. JSON Prediction Payload| FE
-    
-    FE -->|7. Dynamic Rendering| ResPage[Result Page]
-    ResPage --> Chart[Recharts Donut Chart]
-    ResPage --> Scaler[Dynamic Portion Scaler 0.5x - 2.0x]
-    ResPage --> HistCtx[History Context / Backend Sync]
+    API --> Validate[Validate size, format, dimensions and decode]
+    Validate --> Transform[Resize/crop and ImageNet normalize]
+    Transform --> Model[PyTorch multi-task CNN]
+    Model --> Class[101 food-class logits]
+    Model --> Regression[4 normalized nutrition outputs]
+    Class --> Format[De-normalize, validate and format result]
+    Regression --> Format
+    Format --> Fiber[Derive fiber from carbs and predicted food]
+    Fiber --> SaveImage[Save validated upload]
+    SaveImage --> Response[Return prediction and image URL]
+    Response --> FE
+    History --> DB[(SQLite or PostgreSQL)]
+    Auth --> DB
+    FE --> Result[Render result, adjust display portion and save to history]
 ```
 
 ### ML Pipeline Data Flow
 
 ```mermaid
 flowchart LR
-    F101[(Food-101 Dataset<br/>101,000 images)] --> Align[Label Alignment Engine<br/>align_labels.py]
-    N5k[(Nutrition5k Dataset<br/>Dish Cafeteria Metadata)] --> Align
-    Align --> Comb[combined_labels.csv<br/>Proxy Nutritional Targets]
+    F101[(Food-101 images and labels)] --> Align[Label alignment]
+    N5k[(Nutrition5k nutrition annotations)] --> Align
+    Manual[Manual per-serving overrides] --> Align
+    Align --> Comb[Combined labels<br/>class-level nutrition targets]
     Comb --> Splits[Data Splitter 70/15/15<br/>splits.py]
     Splits --> Train[Two-Stage Trainer<br/>train.py]
     Train --> Stage1[Stage 1: Frozen Backbone]
@@ -176,18 +168,18 @@ flowchart LR
 
 ---
 
-## 5. Complete Directory & File Structure
+## 5. Project Structure
 
-Below is the complete tree of the workspace with annotations for every file and folder:
+This is the main source layout; virtual environments, installed packages, generated
+builds, datasets, model weights, and local runtime data are omitted.
 
 ```text
 c:\Users\KARAN\Food Image Calorie Estimator\
 │
-├── .git/                                 # Git version control metadata
-├── .venv/                                # Local Python virtual environment
 ├── docker-compose.yml                    # Multi-container orchestration (Frontend + Backend)
 ├── README.md                             # High-level repository summary & quick start
 ├── PROJECT_DOCUMENTATION.md              # Complete exhaustive project documentation (This file)
+├── DEPLOYMENT.md                          # Hosting, TLS, backups, and deployment verification
 │
 ├── backend/                              # FastAPI Python Backend
 │   ├── Dockerfile                        # Python 3.11 container definition
@@ -197,11 +189,13 @@ c:\Users\KARAN\Food Image Calorie Estimator\
 │   │   ├── main.py                       # FastAPI application setup, CORS, and REST route handlers
 │   │   ├── model.py                      # MultiTaskFoodCNN PyTorch model architecture
 │   │   ├── predictor.py                  # Image loader, transforms, and inference execution engine
-│   │   ├── database.py                   # SQLite persistence layer for users and scan history
+│   │   ├── model_validation.py            # Checkpoint validation and rejection reasons
+│   │   ├── models.py                     # SQLAlchemy user and food-prediction ORM models
+│   │   ├── database.py                   # Persistence setup and user/history operations
 │   │   ├── auth.py                       # bcrypt password hashing & RFC 7519 JWT auth handling
 │   │   └── schemas.py                    # Pydantic data validation contracts (Prediction, Auth, History)
-│   └── tests/                            # API integration tests
-│       └── test_api.py                   # Automated tests for Health, Auth, History CRUD & validation
+│   ├── alembic/                          # Database migration environment and revisions
+│   └── tests/                            # Backend API and model-validation tests
 │
 ├── frontend/                             # React + Vite Single Page Web Application
 │   ├── index.html                        # SPA HTML root entry point with Google Fonts
@@ -285,8 +279,9 @@ c:\Users\KARAN\Food Image Calorie Estimator\
     ├── evaluation/                       # Model evaluation & benchmarking
     │   └── evaluate.py                   # Test split evaluation (Top-1/5, F1, MAE, RMSE, Pearson r, R2)
     │
-    ├── inference/                        # Post-training optimization & runtime deployment
+    ├── inference/                        # Post-training export and runtime preparation
     │   └── export_and_quantize.py        # INT8 dynamic quantization, TorchScript & ONNX export
+    ├── optimization/                     # Pruning, quantization, and benchmark tools/results
     │
     ├── notebooks/                        # Interactive Jupyter experimentation notebooks
     │   ├── 00_environment_check.ipynb    # Validates GPU accelerator, CUDA drivers, and libraries
@@ -307,43 +302,44 @@ c:\Users\KARAN\Food Image Calorie Estimator\
 
 ## 6. Core Features & User Experience
 
-### 1. Futuristic AI Laser Scanning
-When a user uploads or snaps an image of their meal, the `ScanningOverlay` component overlays a neon holographic reticle, corner target markers, and an animated scanning laser beam that moves vertically across the photo to simulate real-time visual neural processing.
+### 1. Image analysis workflow
+The user selects an image in the upload/analyze flow. The frontend validates the selection and shows an animated scanning state while it sends the image to the backend. The backend performs the authoritative file checks and inference. The animation is a presentation effect; it does not represent a separate scanning or image-processing model.
 
 ### 2. Multi-Task Nutrition Predictions
-Rather than estimating calories from generic lookup tables, the model simultaneously outputs:
+The installed model produces:
 - **Food Class**: Identified dish name and category.
-- **Calories**: Continuous predicted energy value.
-- **Macronutrients**: Protein, Carbohydrates, Fat, and Dietary Fiber in grams.
+- **Nutrition regression**: Calories, protein, carbohydrates, and fat. Regression targets are z-scored during training and de-normalized by the predictor.
+- **Derived fiber**: A deterministic category-based estimate from predicted carbohydrates; it is not predicted by a model head.
 - **Confidence Metric**: Confidence score expressed as a percentage, visually highlighted with color-coded badges (`Emerald` for high, `Amber` for moderate, `Rose` for low).
 
-### 3. Dynamic Portion Scaler
-Meals are rarely standard 100g portions. The Result view includes an interactive portion multiplier:
-- Users select `0.5x (Half)`, `1.0x (Standard)`, `1.5x (Large)`, or `2.0x (Double)`.
-- All calorie numbers, macro grams, and daily recommended values (`% DV`) recalculate dynamically on screen in real time.
+Nutrition estimates are based on class-level targets, so they should not be interpreted as precise measurements of the photographed plate. The model does not estimate food mass or portion size from image geometry.
 
-### 4. Interactive Caloric Share Donut Chart
+### 3. Portion display multiplier
+The result view can multiply the displayed calories and nutrient values for a manually selected portion. This is a front-end convenience; the original prediction remains the model estimate and no portion detector is run.
+
+### 4. Macro energy donut chart
 Built using Recharts, the chart calculates the caloric contribution of each macronutrient:
 $$\text{Caloric Contribution} = (\text{Protein} \times 4) + (\text{Carbs} \times 4) + (\text{Fat} \times 9)$$
-Displays interactive hover tooltips with exact gram counts and percentage shares.
+Displays macro energy shares using the current displayed portion values.
 
 ### 5. Low-Confidence Safeguards
-If the image is blurry, poorly lit, or depicts an unrecognized dish (confidence $< 65\%$), the system displays a prominent `LowConfidenceAlert` banner with actionable advice:
+When the class confidence is below the configured threshold, the system displays a `LowConfidenceAlert` banner with retake guidance:
 - Ensure adequate lighting.
 - Keep the plate centered in frame.
 - Avoid blurry overhead angles.
 
 ### 6. Scan History & Search Workstation
 - Persists every analysis in the FastAPI backend database, scoped to the signed-in user.
-- Allows switching between **Grid View** (visual cards) and **Table View** (dense list).
-- Live search by dish name or dietary tag.
-- Category filters: *All Dishes*, *High Protein ($\ge 25\text{g}$)*, *Low Calorie ($\le 450\text{ kcal}$)*, *High Calorie ($\ge 650\text{ kcal}$)*.
-- Sorting by date, calories (ascending/descending), or protein.
-- Detail preview modal and instant item deletion.
+- Allows switching between **Grid View** and **Table View**.
+- Searches food names and dietary tags.
+- Filters by *High Protein (25g+)*, *Under 450 kcal*, or *650+ kcal*.
+- Sorts by newest/oldest, calories, or protein.
+- Opens a saved result, deletes one record, or clears all records for the current account.
 
-### 7. Nutrition Goals & Streak Tracking
-- Users set custom daily targets in `Profile.jsx` (e.g., 2,200 kcal, 130g protein).
-- QuickStats automatically aggregates the user's logged intake for the current day and compares it against their personalized targets.
+### 7. Nutrition goals and dashboard statistics
+- Users can set daily calorie and protein goals in `Profile.jsx`.
+- Dashboard statistics are derived from saved history, including today's logged calories and protein and a recent-scan count.
+- These are summaries of saved estimates, not verified food intake.
 
 ---
 
@@ -364,8 +360,10 @@ Where:
 
 ### Two-Stage Training Regime (`train.py`)
 To prevent the random initialization of the regression and classification heads from destroying pretrained ImageNet weights:
-1. **Stage 1 (Feature Extraction)**: The ResNet-50 backbone is completely frozen (`requires_grad = False`). Only the shared dense layer and the task heads are trained for 2 epochs with learning rate $\eta = 10^{-3}$.
-2. **Stage 2 (Fine-Tuning)**: The top residual block of the backbone is unfrozen. The entire model is fine-tuned for 8 epochs with a reduced learning rate $\eta = 10^{-4}$ and automatic mixed precision (`torch.cuda.amp.autocast`).
+1. **Stage 1 (Feature Extraction)**: The backbone is frozen and the classification/regression heads are trained.
+2. **Stage 2 (Fine-Tuning)**: The configured deepest backbone stage is unfrozen and fine-tuned with the heads at a lower learning rate. AMP is used when configured and supported.
+
+The base YAML configuration specifies two frozen-stage epochs and eight fine-tuning epochs. The installed checkpoint was produced with CLI overrides for four epochs total: one frozen epoch followed by three fine-tuning epochs (see the measured run below).
 
 ### Measured Training Run (2026-11-17)
 The installed checkpoint was trained on the full Food-101 split (70,700 train /
@@ -465,7 +463,7 @@ The FastAPI backend runs on port `8000` by default. Interactive OpenAPI Swagger 
 - **Route**: `POST /api/predict`
 - **Auth**: Bearer JWT
 - **Content-Type**: `multipart/form-data`
-- **Form Field**: `image` (decodable JPEG, PNG, or WEBP; max 15 MB, max 8000 px per side)
+- **Form Field**: `image` (decodable JPEG, PNG, or WEBP; max 15 MB and max 8000 pixels per side)
 - **Otherwise**: `503` when no valid checkpoint is installed; `400` for decode/format violations.
 - **Response Schema** (measured response for a Food-101 pizza image on
   2026-11-17; inference time is the first, cold request — warm requests measured
@@ -499,10 +497,10 @@ The FastAPI backend runs on port `8000` by default. Interactive OpenAPI Swagger 
 - `DELETE /api/history`: Clears all records for the caller.
 
 #### 4. Authentication
-- `POST /api/auth/register`, `POST /api/auth/login`: Return a JWT and user profile.
-- `GET /api/auth/me`, `PUT /api/auth/profile`: Read and update name/goals.
+- `POST /api/auth/signup` (also available as `/api/auth/register`) and `POST /api/auth/login`: Return a JWT and user profile.
+- `GET /api/auth/me`, `PATCH /api/auth/profile`: Read and update name/goals.
 - `POST /api/auth/change-password`: Verifies the current password and returns a new JWT.
-- `POST /api/auth/logout`: Acknowledges client-side token disposal.
+- `POST /api/auth/logout`: Acknowledges logout; JWTs are stateless and the client discards its token.
 
 ---
 
@@ -528,6 +526,19 @@ enable the demo account.
 
 ### Method 2: Running Locally (Bare Metal)
 
+#### Configure environment
+Copy `.env.example` to `.env` at the repository root. Set a strong `SECRET_KEY`
+for production; the backend refuses to start in production without it. Review
+`APP_ENV`, `DATABASE_URL`, `DATA_DIR`, `UPLOADS_DIR`, `MODEL_VARIANT`,
+`MODEL_WEIGHTS_PATH`, `CORS_ORIGINS`, `SEED_DEMO`, and `VITE_API_URL` for the
+environment you are running. Do not commit the real `.env` file.
+
+The backend validates the configured model checkpoint during startup. The
+included `backend/app/best_model.pth` is used by default; if it is missing or
+rejected, `/api/health` reports the reason and `/api/predict` returns `503`.
+This is distinct from API health: the service can be reachable while its model
+is not ready to predict.
+
 #### Step 1: Start the React Frontend
 ```bash
 cd frontend
@@ -539,15 +550,31 @@ The frontend starts on `http://localhost:5173`. You can immediately log in with 
 #### Step 2: Start the FastAPI Backend
 ```bash
 cd backend
-python -m venv .venv
-# On Windows:
-.venv\Scripts\activate
+python -m venv ../.venv
+# Windows PowerShell:
+..\.venv\Scripts\Activate.ps1
 # On Linux/macOS:
-source .venv/bin/activate
+source ../.venv/bin/activate
 
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+#### Run tests and checks
+From the repository root, run the focused backend and ML test suites and build
+the frontend:
+
+```bash
+.venv/Scripts/python.exe -m pytest backend/tests -q
+.venv/Scripts/python.exe -m pytest ml/tests -q
+cd frontend
+npm run lint
+npm run build
+```
+
+The backend API docs are available at `http://localhost:8000/docs`. For data
+preparation and GPU training details, see `ml/training/RUN_INSTRUCTIONS.md`;
+for deployment options and operational guidance, see `DEPLOYMENT.md`.
 
 ---
 
